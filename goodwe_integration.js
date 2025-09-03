@@ -9,7 +9,7 @@ const app = express();
 const port = 3001;
 
 // Configuração para conectar ao MongoDB
-const DB_URI = 'mongodb://localhost:27017/goodwe_app';
+const DB_URI = 'mongodb+srv://guiwillians:Gui121006@cluster0.wgigb5x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 mongoose.connect(DB_URI)
     .then(() => console.log('Serviço de Integração conectado ao MongoDB'))
     .catch(err => console.error('Erro de conexão ao MongoDB:', err));
