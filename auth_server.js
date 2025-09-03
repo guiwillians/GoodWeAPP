@@ -10,7 +10,7 @@ const port = 3000;
 app.use(express.json());
 
 // URI de conexão para o seu banco de dados local
-const DB_URI = 'mongodb://localhost:27017/goodwe_app';
+const DB_URI = 'mongodb+srv://guiwillians:Gui121006@cluster0.wgigb5x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
 // Chave secreta para os tokens JWT. Mantenha-a segura e em variáveis de ambiente em produção!
 const JWT_SECRET = 'your_super_secret_jwt_key';
