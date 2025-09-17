@@ -1,15 +1,18 @@
+// Carrega as variáveis de ambiente do arquivo .env
+require('dotenv').config();
+
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const jwt = require('jsonwebtoken'); // Importa o JWT para usar o secret
+const jwt = require('jsonwebtoken');
 const authenticateToken = require('./auth_middleware');
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 // Configuração para conectar ao MongoDB
-const DB_URI = 'mongodb+srv://guiwillians:Gui121006@cluster0.wgigb5x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const DB_URI = process.env.DB_URI;
 mongoose.connect(DB_URI)
     .then(() => console.log('Serviço de Integração conectado ao MongoDB'))
     .catch(err => console.error('Erro de conexão ao MongoDB:', err));
@@ -27,26 +30,37 @@ const PowerData = mongoose.model('PowerData', powerDataSchema);
 app.use(cors());
 app.use(express.json());
 
-// URL base da API do SEMS Portal (use 'us' ou 'eu' conforme a região do inversor)
+// URL base da API do SEMS Portal
 const SEMS_BASE_URL = 'https://eu.semsportal.com';
 
-// Rota de login para a API do SEMS Portal
-// Esta rota é interna e usada apenas pelo nosso back-end
+// --- NOVA ROTA PARA GERAR O TOKEN JWT ---
+// Use esta rota para obter o token para as rotas protegidas
+app.post('/auth/login', (req, res) => {
+    // Este é um exemplo simples. Em um projeto real, você verificaria o login e a senha aqui.
+    // O userId pode ser qualquer identificador único que você salve.
+    const user = {
+        userId: '65f6c825a0a38b251b32e08e', // Exemplo de um ObjectId fixo para testes
+    };
+
+    const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token });
+});
+
+// --- Rota de login para a API do SEMS Portal ---
 app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
     const { account, pwd } = req.body;
-    
-    // Constrói o token inicial (como no código Python)
+
     const initialTokenPayload = { "uid": "", "timestamp": 0, "token": "", "client": "web", "version": "", "language": "en" };
     const initialToken = Buffer.from(JSON.stringify(initialTokenPayload)).toString('base64');
-    
+
     const loginUrl = `${SEMS_BASE_URL}/api/v2/common/crosslogin`;
     const headers = { "Token": initialToken, "Content-Type": "application/json", "Accept": "*/*" };
     const payload = { "account": account, "pwd": pwd, "agreement_agreement": 0, "is_local": false };
-    
+
     try {
         const response = await axios.post(loginUrl, payload, { headers: headers, timeout: 20000 });
         const semsData = response.data;
-        
+
         if (semsData.code === 0 || semsData.code === 1 || semsData.code === 200) {
             const token = Buffer.from(JSON.stringify(semsData.data)).toString('base64');
             res.status(200).json({ semsToken: token });
@@ -59,10 +73,10 @@ app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
     }
 });
 
-// Rota protegida para buscar e salvar os dados da powerstation
+// --- Rota protegida para buscar e salvar os dados da powerstation ---
 app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
     const { semsToken, invId, column, date } = req.body;
-    
+
     if (!semsToken || !invId || !column || !date) {
         return res.status(400).json({ message: 'Parâmetros necessários faltando.' });
     }
@@ -96,6 +110,29 @@ app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
         } else {
             res.status(500).json({ message: 'Erro interno ao processar a requisição.' });
         }
+    }
+});
+
+app.listen(port, () => {
+    console.log(`Serviço de integração da GoodWe rodando em http://localhost:${port}`);
+});
+
+// Importa o construtor da Skill da Alexa do novo arquivo
+const alexaSkillBuilder = require('./alexa_handler');
+
+// ... (todas as suas rotas anteriores) ...
+
+// --- Rota para a Alexa ---
+// A Alexa enviará todas as requisições para este endpoint
+// A sua rota /alexa no arquivo goodwe_integration.js
+app.post('/alexa', async (req, res) => {
+    try {
+        const skill = alexaSkillBuilder.create();
+        const response = await skill.invoke(req.body);
+        res.json(response);
+    } catch (error) {
+        console.error('Erro ao processar requisição da Alexa:', error.message);
+        res.status(500).json({ error: 'Erro interno do servidor Alexa.' });
     }
 });
 

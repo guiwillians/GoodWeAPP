@@ -5,6 +5,7 @@
   "main": "auth_server.js",
   "dependencies": {
     "accepts": "^2.0.0",
+    "ask-sdk-core": "^2.14.0",
     "asynckit": "^0.4.0",
     "axios": "^1.11.0",
     "bcryptjs": "^3.0.2",
@@ -23,6 +24,7 @@
     "debug": "^4.4.1",
     "delayed-stream": "^1.0.0",
     "depd": "^2.0.0",
+    "dotenv": "^17.2.2",
     "dunder-proto": "^1.0.1",
     "ecdsa-sig-formatter": "^1.0.11",
     "ee-first": "^1.1.1",
