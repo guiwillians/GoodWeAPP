@@ -13,10 +13,10 @@ const GetPowerGenerationIntentHandler = {
 
         try {
             // Em um sistema real, o semsToken e o invId seriam armazenados
-            const semsToken = 'aqui-vai-o-semsToken'; // Cole aqui o semsToken que você obteve no Postman
-            const invId = 'seu_id_do_inversor'; // Cole aqui o ID do seu inversor
+            const semsToken = 'eyJ1aWQiOiJlMWMzNDE0Zi1jOWEzLTRlNGEtYjRhNi1hZmMzMGI2ODIwNTciLCJ0aW1lc3RhbXAiOjE3NTgwNjk2ODg5NjcsInRva2VuIjoiQkFDMjBDMzItQjVEMi00ODk0LUFFQ0ItRDk3OTk5ODdBREQ5IiwiY2xpZW50Ijoid2ViIiwidmVyc2lvbiI6IiIsImxhbmd1YWdlIjoiZW4ifQ=='; // Cole aqui o semsToken que você obteve no Postman
+            const invId = '5010KETU229W6177'; // Cole aqui o ID do seu inversor
 
-            const response = await axios.post('http://localhost:3001/api/goodwe/data', {
+            const response = await axios.post('https://good-we-app.vercel.app/api/goodwe/data', {
                 semsToken: semsToken,
                 invId: invId,
                 column: 'Pac',
