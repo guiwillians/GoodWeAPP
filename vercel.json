@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/alexa.js": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "routes": [
     {
       "src": "/alexa",
