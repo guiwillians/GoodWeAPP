@@ -13,7 +13,7 @@ app.use(express.json());
 const DB_URI = 'mongodb+srv://guiwillians:Gui121006@cluster0.wgigb5x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
 // Chave secreta para os tokens JWT. Mantenha-a segura e em variáveis de ambiente em produção!
-const JWT_SECRET = 'your_super_secret_jwt_key';
+const JWT_SECRET = 'gs!P?w2@3KUD#bX';
 
 // Conectar ao MongoDB
 mongoose.connect(DB_URI)
