@@ -3,14 +3,28 @@ require('dotenv').config();
 
 const express = require('express');
 const axios = require('axios');
-const cors = require('cors');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const authenticateToken = require('./auth_middleware');
 
 const app = express();
 const port = process.env.PORT || 3001;
+const cors = require('cors');
 
+app.use(cors({
+    origin: [
+        'https://*.vercel.app',
+        'https://*.vercel.app/*',
+        'https://vercel.app',
+        'https://alexa.amazon.com',
+        'https://*.amazonaws.com'
+    ],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Token']
+}));
+
+// Habilite preflight requests
+app.options('*', cors());
 // Configuração para conectar ao MongoDB
 const DB_URI = process.env.DB_URI;
 mongoose.connect(DB_URI)
@@ -118,7 +132,7 @@ app.listen(port, () => {
 });
 
 // Importa o construtor da Skill da Alexa do novo arquivo
-const alexaSkillBuilder = require('./alexa_handler');
+const alexaSkillBuilder = require('./api/alexa');
 
 // ... (todas as suas rotas anteriores) ...
 
