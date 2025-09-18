@@ -2,6 +2,21 @@
 const axios = require('axios');
 const Alexa = require('ask-sdk-core');
 
+const SEMS_LOGIN_URL = 'https://good-we-app.vercel.app/api/goodwe/sems-login';
+const SEMS_DATA_URL = 'https://good-we-app.vercel.app/api/goodwe/data';
+const SEMS_ACCOUNT = 'demo@goodwe.com'; // Use a conta da GoodWe para login
+const SEMS_PWD = 'GoodweSems123!@#';
+
+// Função para obter um novo semsToken
+async function getSemsToken() {
+    const loginPayload = {
+        account: SEMS_ACCOUNT,
+        pwd: SEMS_PWD
+    };
+    const response = await axios.post(SEMS_LOGIN_URL, loginPayload);
+    return response.data.semsToken;
+}
+
 // Manipulador para a intenção de geração de energia
 const GetPowerGenerationIntentHandler = {
     canHandle(handlerInput) {
@@ -12,17 +27,18 @@ const GetPowerGenerationIntentHandler = {
         let speechText = 'Desculpe, não consegui obter os dados no momento.';
 
         try {
-            // Em um sistema real, o semsToken e o invId seriam armazenados
-            const semsToken = 'eyJ1aWQiOiJlMWMzNDE0Zi1jOWEzLTRlNGEtYjRhNi1hZmMzMGI2ODIwNTciLCJ0aW1lc3RhbXAiOjE3NTgwNjk2ODg5NjcsInRva2VuIjoiQkFDMjBDMzItQjVEMi00ODk0LUFFQ0ItRDk3OTk5ODdBREQ5IiwiY2xpZW50Ijoid2ViIiwidmVyc2lvbiI6IiIsImxhbmd1YWdlIjoiZW4ifQ=='; // Cole aqui o semsToken que você obteve no Postman
-            const invId = '5010KETU229W6177'; // Cole aqui o ID do seu inversor
-
-            const response = await axios.post('https://good-we-app.vercel.app/api/goodwe/data', {
+            // 1. Obter um novo semsToken para a sessão
+            const semsToken = await getSemsToken();
+            const invId = '5010KETU229W6177'; // ID do inversor
+            
+            // 2. Usar o novo token para obter os dados de Pac
+            const response = await axios.post(SEMS_DATA_URL, {
                 semsToken: semsToken,
                 invId: invId,
                 column: 'Pac',
                 date: new Date().toISOString()
             });
-            
+
             const apiData = response.data;
 
             if (apiData.data.column1 && apiData.data.column1.length > 0) {
@@ -63,5 +79,4 @@ const skillBuilder = Alexa.SkillBuilders.custom()
         GetPowerGenerationIntentHandler
     );
 
-// Exporta o skillBuilder para ser usado no arquivo principal
 module.exports = skillBuilder;
