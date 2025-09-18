@@ -1,21 +1,21 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/alexa.js",
-      "use": "@vercel/node"
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs18.x"
     }
-  ],
+  },
   "routes": [
     {
-      "src": "/api/alexa",
-      "dest": "/api/alexa.js",
-      "methods": ["POST", "OPTIONS"]
+      "src": "/api/goodwe/sems-login",
+      "dest": "/api/goodwe_integration.js"
+    },
+    {
+      "src": "/api/goodwe/data",
+      "dest": "/api/goodwe_integration.js"
+    },
+    {
+      "src": "/alexa",
+      "dest": "/api/alexa.js"
     }
-  ],
-  "functions": {
-    "api/alexa.js": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
