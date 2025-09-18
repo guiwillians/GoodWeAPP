@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/alexa.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
   "routes": [
     {
       "src": "/alexa",
