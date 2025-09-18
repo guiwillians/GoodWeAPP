@@ -7,11 +7,11 @@
   "routes": [
     {
       "src": "/api/goodwe/sems-login",
-      "dest": "/api/goodwe_integration.js"
+      "dest": "/goodwe_integration.js"
     },
     {
       "src": "/api/goodwe/data",
-      "dest": "/api/goodwe_integration.js"
+      "dest": "/goodwe_integration.js"
     },
     {
       "src": "/alexa",
