@@ -158,6 +158,20 @@ app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
         });
     }
 });
+const tuya = require('./tuya'); // Importa as funções do arquivo tuya.js
+
+// Nova rota para listar dispositivos Tuya
+app.get('/api/tuya/devices', async (req, res) => {
+    try {
+        const accessToken = await tuya.getTuyaAccessToken();
+        const deviceList = await tuya.getTuyaDeviceList(accessToken);
+
+        res.status(200).json(deviceList);
+    } catch (error) {
+        console.error('Erro na integração Tuya:', error.message);
+        res.status(500).json({ message: 'Erro ao conectar com a API Tuya.' });
+    }
+});
 
 // Rota de health check
 app.get('/health', (req, res) => {
@@ -165,35 +179,6 @@ app.get('/health', (req, res) => {
         status: 'OK', 
         message: 'API GoodWe está funcionando' 
     });
-});
-
-// Rota para a Alexa (simplificada)
-app.post('/alexa', async (req, res) => {
-    try {
-        const Alexa = require('ask-sdk-core');
-        
-        const LaunchRequestHandler = {
-            canHandle(handlerInput) {
-                return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
-            },
-            handle(handlerInput) {
-                const speechText = 'Bem-vindo ao sistema Goodwe! Como posso ajudar?';
-                return handlerInput.responseBuilder
-                    .speak(speechText)
-                    .getResponse();
-            }
-        };
-
-        const skill = Alexa.SkillBuilders.custom()
-            .addRequestHandlers(LaunchRequestHandler)
-            .lambda();
-
-        const response = await skill(req.body);
-        res.json(response);
-    } catch (error) {
-        console.error('Erro Alexa:', error);
-        res.status(500).json({ error: 'Erro interno' });
-    }
 });
 
 app.listen(port, () => {
