@@ -28,7 +28,7 @@ const GetPowerGenerationIntentHandler = {
             
             // 1. Login na sua API
             const loginResponse = await axios.post(
-                `${SUA_API_URL}/api/goodwe/sems-login`,
+                'https://good-we-app.vercel.app/api/goodwe/sems-login',
                 {
                     account: process.env.GOODWE_ACCOUNT,
                     pwd: process.env.GOODWE_PASSWORD
@@ -44,7 +44,7 @@ const GetPowerGenerationIntentHandler = {
 
             // 2. Buscar dados de energia
             const dataResponse = await axios.post(
-                `${SUA_API_URL}/api/goodwe/data`,
+                'https://good-we-app.vercel.app/api/goodwe/data',
                 {
                     semsToken: semsToken,
                     invId: process.env.INV_ID,
