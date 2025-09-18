@@ -2,19 +2,27 @@
 const axios = require('axios');
 const Alexa = require('ask-sdk-core');
 
-const SEMS_LOGIN_URL = 'https://good-we-app.vercel.app/api/goodwe/sems-login';
-const SEMS_DATA_URL = 'https://good-we-app.vercel.app/api/goodwe/data';
-const SEMS_ACCOUNT = 'demo@goodwe.com'; // Use a conta da GoodWe para login
+const SEMS_BASE_URL = 'https://eu.semsportal.com';
+const SEMS_ACCOUNT = 'demo@goodwe.com';
 const SEMS_PWD = 'GoodweSems123!@#';
+const invId = '5010KETU229W6177'; // ID do inversor
 
-// Função para obter um novo semsToken
+// Função para obter um novo semsToken diretamente da API da GoodWe
 async function getSemsToken() {
-    const loginPayload = {
-        account: SEMS_ACCOUNT,
-        pwd: SEMS_PWD
-    };
-    const response = await axios.post(SEMS_LOGIN_URL, loginPayload);
-    return response.data.semsToken;
+    const initialTokenPayload = { "uid": "", "timestamp": 0, "token": "", "client": "web", "version": "", "language": "en" };
+    const initialToken = Buffer.from(JSON.stringify(initialTokenPayload)).toString('base64');
+    
+    const loginUrl = `${SEMS_BASE_URL}/api/v2/common/crosslogin`;
+    const headers = { "Token": initialToken, "Content-Type": "application/json", "Accept": "*/*" };
+    const payload = { "account": SEMS_ACCOUNT, "pwd": SEMS_PWD, "agreement_agreement": 0, "is_local": false };
+    
+    const response = await axios.post(loginUrl, payload, { headers: headers, timeout: 20000 });
+    const semsData = response.data;
+    
+    if (semsData.code === 0 || semsData.code === 1 || semsData.code === 200) {
+        return Buffer.from(JSON.stringify(semsData.data)).toString('base64');
+    }
+    throw new Error('Falha no login com a API GoodWe.');
 }
 
 // Manipulador para a intenção de geração de energia
@@ -27,18 +35,14 @@ const GetPowerGenerationIntentHandler = {
         let speechText = 'Desculpe, não consegui obter os dados no momento.';
 
         try {
-            // 1. Obter um novo semsToken para a sessão
             const semsToken = await getSemsToken();
-            const invId = '5010KETU229W6177'; // ID do inversor
             
-            // 2. Usar o novo token para obter os dados de Pac
-            const response = await axios.post(SEMS_DATA_URL, {
-                semsToken: semsToken,
-                invId: invId,
-                column: 'Pac',
-                date: new Date().toISOString()
-            });
+            const dataUrl = `${SEMS_BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
+            const headers = { "Token": semsToken, "Content-Type": "application/json", "Accept": "*/*" };
+            const payload = { "date": new Date().toISOString(), "column": "Pac", "id": invId };
 
+            const response = await axios.post(dataUrl, payload, { headers: headers, timeout: 20000 });
+            
             const apiData = response.data;
 
             if (apiData.data.column1 && apiData.data.column1.length > 0) {
