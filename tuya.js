@@ -8,29 +8,7 @@ const CLIENT_SECRET = process.env.TUYA_CLIENT_SECRET;
 
 async function getTuyaAccessToken() {
     const timestamp = Date.now().toString();
-
-    const sign = crypto.createHmac('sha256', CLIENT_SECRET)
-                       .update(CLIENT_ID + '\n' + timestamp)
-                       .digest('hex')
-                       .toUpperCase();
-
-    const headers = {
-        'client_id': CLIENT_ID,
-        'sign': sign,
-        't': timestamp,
-        'sign_method': 'HMAC-SHA256',
-    };
-
-    try {
-        const response = await axios.get(
-            `${TUYA_API_URL}/v1.0/token?grant_type=1`,
-            { headers: headers }
-        );
-        return response.data.result.access_token;
-    } catch (error) {
-        console.error('Erro ao obter token da Tuya:', error.response.data);
-        throw new Error('Falha na autenticação com a API da Tuya');
-    }
+    // ... (rest of the code to get the access token) ...
 }
 
 async function getTuyaDeviceList(accessToken) {
@@ -42,9 +20,10 @@ async function getTuyaDeviceList(accessToken) {
         `${TUYA_API_URL}/v1.0/iot-03/devices`,
         { headers: headers }
     );
-    return response.data.result;
+    return response.data.result; // Esta é a linha que retorna a lista
 }
 
+// Esta linha é crucial para exportar as funções
 module.exports = {
     getTuyaAccessToken,
     getTuyaDeviceList
