@@ -1,3 +1,4 @@
+// goodwe_integration.js
 require('dotenv').config();
 
 const express = require('express');
@@ -12,7 +13,7 @@ const port = process.env.PORT || 3001;
 // Configuração para conectar ao MongoDB
 const DB_URI = process.env.DB_URI;
 mongoose.connect(DB_URI)
-    .then(() => console.log('Serviço de Integração conectado ao MongoDB'))
+    .then(() => console.log('✅ Serviço de Integração conectado ao MongoDB'))
     .catch(err => console.error('Erro de conexão ao MongoDB:', err));
 
 // Esquema para os dados da powerstation
@@ -25,16 +26,10 @@ const powerDataSchema = new mongoose.Schema({
 
 const PowerData = mongoose.model('PowerData', powerDataSchema);
 
-// Configuração CORS correta
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors());
 app.use(express.json());
 
-// Middleware de autenticação simplificado
+// Middleware de autenticação
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -54,8 +49,9 @@ const authenticateToken = (req, res, next) => {
 
 // URL base da API do SEMS Portal
 const SEMS_BASE_URL = 'https://eu.semsportal.com';
+const tuya = require('./tuya'); // Importa as funções da Tuya
 
-// Rota de login para a API do SEMS Portal
+// --- Rotas da GoodWe ---
 app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
     const { account, pwd } = req.body;
 
@@ -109,7 +105,6 @@ app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
     }
 });
 
-// Rota para buscar e salvar dados da powerstation
 app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
     const { semsToken, invId, column, date } = req.body;
 
@@ -140,7 +135,6 @@ app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
         
         const apiData = response.data;
         
-        // Salva os dados no MongoDB
         const newPowerData = new PowerData({
             userId: req.user.userId,
             invId: invId,
@@ -158,10 +152,9 @@ app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
         });
     }
 });
-const tuya = require('./tuya'); // Importa as funções do arquivo tuya.js
 
-// Nova rota para listar dispositivos Tuya
-app.get('/api/tuya/devices', async (req, res) => {
+// --- Rotas da Tuya ---
+app.get('/api/tuya/devices', authenticateToken, async (req, res) => {
     try {
         const accessToken = await tuya.getTuyaAccessToken();
         const deviceList = await tuya.getTuyaDeviceList(accessToken);
@@ -171,14 +164,6 @@ app.get('/api/tuya/devices', async (req, res) => {
         console.error('Erro na integração Tuya:', error.message);
         res.status(500).json({ message: 'Erro ao conectar com a API Tuya.' });
     }
-});
-
-// Rota de health check
-app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'OK', 
-        message: 'API GoodWe está funcionando' 
-    });
 });
 
 app.listen(port, () => {
