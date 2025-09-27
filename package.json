@@ -4,6 +4,7 @@
   "description": "GoodWe APP - Backend Este é o repositório do back-end do aplicativo GoodWe, projetado para integrar com a API do SEMS Portal da GoodWe e com assistentes de voz como Alexa e Google Assistant. O projeto utiliza Node.js, Express e MongoDB para gerenciar a autenticação de usuários, coletar e persistir dados de inversores e servir como a base para futuras integrações de IoT.",
   "main": "goodwe_integration.js",
   "dependencies": {
+    "@tuya/tuya-connector-nodejs": "^2.1.2",
     "accepts": "^2.0.0",
     "ask-sdk-core": "^2.14.0",
     "asynckit": "^0.4.0",
@@ -115,7 +116,7 @@
   "scripts": {
     "start": "node goodwe_integration.js",
     "test": "echo \"Error: no test specified\" && exit 1"
-},
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/guiwillians/GoodWeAPP.git"
