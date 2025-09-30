@@ -32,20 +32,23 @@ const PowerData = mongoose.model('PowerData', powerDataSchema);
 app.use(cors());
 app.use(express.json());
 
-// --- MOVA ESTA ROTA PARA AQUI ---
+// Rota de teste simples (GET)
 app.get('/test-server', (req, res) => {
     res.status(200).send('Servidor está ativo!');
 });
+
+// Rota de health check (GET)
 app.get('/health', (req, res) => {
-    res.status(200).json({ 
-        status: 'OK', 
-        message: 'API GoodWe está funcionando' 
-    });
+    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
 });
-// -------------------------------------
 
-// -----------------------------------
-
+// Rota para gerar o Token JWT (POST)
+app.post('/auth/login', (req, res) => {
+    const user = { userId: '65f6c825a0a38b251b32e08e' }; 
+    const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token });
+});
+// -
 
 // Middleware de autenticação
 const authenticateToken = (req, res, next) => {
