@@ -36,6 +36,14 @@ app.use(express.json());
 app.get('/test-server', (req, res) => {
     res.status(200).send('Servidor está ativo!');
 });
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'OK', 
+        message: 'API GoodWe está funcionando' 
+    });
+});
+// -------------------------------------
+
 // -----------------------------------
 
 
