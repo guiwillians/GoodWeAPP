@@ -8,8 +8,11 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3001; // Deve ser process.env.PORT para o Render
 
+app.listen(port, () => {
+    // ...
+});
 // Configuração para conectar ao MongoDB
 const DB_URI = process.env.DB_URI;
 mongoose.connect(DB_URI)
@@ -28,6 +31,13 @@ const PowerData = mongoose.model('PowerData', powerDataSchema);
 
 app.use(cors());
 app.use(express.json());
+
+// --- MOVA ESTA ROTA PARA AQUI ---
+app.get('/test-server', (req, res) => {
+    res.status(200).send('Servidor está ativo!');
+});
+// -----------------------------------
+
 
 // Middleware de autenticação
 const authenticateToken = (req, res, next) => {
@@ -169,3 +179,4 @@ app.get('/api/tuya/devices', authenticateToken, async (req, res) => {
 app.listen(port, () => {
     console.log(`✅ Serviço de integração da GoodWe rodando em http://localhost:${port}`);
 });
+console.log('--- TESTE DE CARGA BEM-SUCEDIDA v7.0 ---');
