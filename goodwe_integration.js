@@ -59,7 +59,6 @@ const authenticateToken = (req, res, next) => {
 
 // URL base da API do SEMS Portal
 const SEMS_BASE_URL = 'https://eu.semsportal.com';
-const tuya = require('./tuya'); // Importa as funções da Tuya
 
 // --- Rotas da GoodWe ---
 app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
@@ -160,19 +159,6 @@ app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
         res.status(500).json({ 
             message: 'Erro interno ao processar a requisição.' 
         });
-    }
-});
-
-// --- Rotas da Tuya ---
-app.get('/api/tuya/devices', authenticateToken, async (req, res) => {
-    try {
-        const accessToken = await tuya.getTuyaAccessToken();
-        const deviceList = await tuya.getTuyaDeviceList(accessToken);
-
-        res.status(200).json(deviceList);
-    } catch (error) {
-        console.error('Erro na integração Tuya:', error.message);
-        res.status(500).json({ message: 'Erro ao conectar com a API Tuya.' });
     }
 });
 
