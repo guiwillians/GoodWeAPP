@@ -31,6 +31,7 @@ const PowerData = mongoose.model('PowerData', powerDataSchema);
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/goodwe', goodweRoutes);
 
 // Rota de teste simples (GET)
 app.get('/test-server', (req, res) => {
@@ -72,6 +73,7 @@ const authenticateToken = (req, res, next) => {
 const SEMS_BASE_URL = 'https://eu.semsportal.com';
 
 // --- Rotas da GoodWe ---
+const goodweRoutes = require('./goodwe_api')(authenticateToken); 
 app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
     const { account, pwd } = req.body;
 
