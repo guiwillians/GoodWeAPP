@@ -69,17 +69,31 @@ const SEMS_BASE_URL = 'https://eu.semsportal.com';
 
 // --- Rotas da GoodWe (PROTEGIDAS) ---
 
-// Rota de login para a API do SEMS Portal
 app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
     const { account, pwd } = req.body;
 
-    const initialTokenPayload = { /* ... */ }; // Estrutura para obter o token inicial
-    const initialToken = Buffer.from(JSON.stringify(initialTokenPayload)).toString('base64');
+    // --- REESTRUTURAÇÃO DO CÓDIGO DE LOGIN ---
+    
+    // 1. O SEMS API requer um token inicial que é apenas Base64(payload padrão)
+    // Usamos um payload mínimo para estabilidade
+    const tokenPayload = { "client": "web", "language": "en" };
+    const initialToken = Buffer.from(JSON.stringify(tokenPayload)).toString('base64');
+
     const loginUrl = `${SEMS_BASE_URL}/api/v2/common/crosslogin`;
-    const headers = { "Token": initialToken, "Content-Type": "application/json", "Accept": "*/*" };
-    const payload = { "account": account, "pwd": pwd, "agreement_agreement": 0, "is_local": false };
+    const headers = { 
+        "Token": initialToken, 
+        "Content-Type": "application/json", 
+        "Accept": "application/json" 
+    };
+    
+    const payload = { 
+        "account": account, 
+        "pwd": pwd,
+        "is_local": false 
+    };
 
     try {
+        // Tenta fazer o login com a nova estrutura
         const response = await axios.post(loginUrl, payload, { headers: headers, timeout: 20000 });
         const semsData = response.data;
 
@@ -94,10 +108,10 @@ app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
         }
     } catch (error) {
         console.error('Erro no crosslogin:', error.message);
+        // Retorna o erro 500 para evitar que o front-end trave
         res.status(500).json({ message: 'Erro ao tentar login na API GoodWe.' });
     }
 });
-
 // Rota para buscar e salvar dados da powerstation
 app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
     const { semsToken, invId, column, date } = req.body;
