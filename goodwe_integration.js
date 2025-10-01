@@ -8,12 +8,9 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-const port = process.env.PORT || 3001; // Deve ser process.env.PORT para o Render
+const port = process.env.PORT || 3001;
 
-app.listen(port, () => {
-    // ...
-});
-// Configuração para conectar ao MongoDB
+// --- Conexão ao MongoDB ---
 const DB_URI = process.env.DB_URI;
 mongoose.connect(DB_URI)
     .then(() => console.log('✅ Serviço de Integração conectado ao MongoDB'))
@@ -26,32 +23,30 @@ const powerDataSchema = new mongoose.Schema({
     data: { type: Object, required: true },
     timestamp: { type: Date, default: Date.now }
 });
-
 const PowerData = mongoose.model('PowerData', powerDataSchema);
 
 app.use(cors());
 app.use(express.json());
-app.use('/api/goodwe', goodweRoutes);
 
-// Rota de teste simples (GET)
-app.get('/test-server', (req, res) => {
-    res.status(200).send('Servidor está ativo!');
-});
+// --- ROTAS DE ACESSO PÚBLICO E TESTE (Devem vir primeiro) ---
 
-// Rota de health check (GET)
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
-});
-
-// Rota para gerar o Token JWT (POST)
+// Rota para gerar o Token JWT (POST /auth/login)
 app.post('/auth/login', (req, res) => {
+    // Usa um ObjectId válido para evitar erros de validação no MongoDB
     const user = { userId: '65f6c825a0a38b251b32e08e' }; 
     const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' });
     res.json({ token });
 });
-// -
 
-// Middleware de autenticação
+// Rota de health check (GET /health)
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
+});
+
+// -----------------------------------------------------------
+
+
+// Middleware de autenticação (Protege as rotas abaixo)
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -59,7 +54,6 @@ const authenticateToken = (req, res, next) => {
     if (!token) {
         return res.status(401).json({ error: 'Token de acesso necessário' });
     }
-
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
@@ -72,42 +66,21 @@ const authenticateToken = (req, res, next) => {
 // URL base da API do SEMS Portal
 const SEMS_BASE_URL = 'https://eu.semsportal.com';
 
-// --- Rotas da GoodWe ---
-const goodweRoutes = require('./goodwe_api')(authenticateToken); 
+
+// --- Rotas da GoodWe (PROTEGIDAS) ---
+
+// Rota de login para a API do SEMS Portal
 app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
     const { account, pwd } = req.body;
 
-    const initialTokenPayload = { 
-        "uid": "", 
-        "timestamp": 0, 
-        "token": "", 
-        "client": "web", 
-        "version": "", 
-        "language": "en" 
-    };
-    
+    const initialTokenPayload = { /* ... */ }; // Estrutura para obter o token inicial
     const initialToken = Buffer.from(JSON.stringify(initialTokenPayload)).toString('base64');
-
     const loginUrl = `${SEMS_BASE_URL}/api/v2/common/crosslogin`;
-    const headers = { 
-        "Token": initialToken, 
-        "Content-Type": "application/json", 
-        "Accept": "*/*" 
-    };
-    
-    const payload = { 
-        "account": account, 
-        "pwd": pwd, 
-        "agreement_agreement": 0, 
-        "is_local": false 
-    };
+    const headers = { "Token": initialToken, "Content-Type": "application/json", "Accept": "*/*" };
+    const payload = { "account": account, "pwd": pwd, "agreement_agreement": 0, "is_local": false };
 
     try {
-        const response = await axios.post(loginUrl, payload, { 
-            headers: headers, 
-            timeout: 20000 
-        });
-        
+        const response = await axios.post(loginUrl, payload, { headers: headers, timeout: 20000 });
         const semsData = response.data;
 
         if (semsData.code === 0 || semsData.code === 1 || semsData.code === 200) {
@@ -121,40 +94,24 @@ app.post('/api/goodwe/sems-login', authenticateToken, async (req, res) => {
         }
     } catch (error) {
         console.error('Erro no crosslogin:', error.message);
-        res.status(500).json({ 
-            message: 'Erro ao tentar login na API GoodWe.' 
-        });
+        res.status(500).json({ message: 'Erro ao tentar login na API GoodWe.' });
     }
 });
 
+// Rota para buscar e salvar dados da powerstation
 app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
     const { semsToken, invId, column, date } = req.body;
 
     if (!semsToken || !invId || !column || !date) {
-        return res.status(400).json({ 
-            message: 'Parâmetros necessários faltando.' 
-        });
+        return res.status(400).json({ message: 'Parâmetros necessários faltando.' });
     }
 
     const dataUrl = `${SEMS_BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
-    const headers = { 
-        "Token": semsToken, 
-        "Content-Type": "application/json", 
-        "Accept": "*/*" 
-    };
-    
-    const payload = { 
-        "date": date, 
-        "column": column, 
-        "id": invId 
-    };
+    const headers = { "Token": semsToken, "Content-Type": "application/json", "Accept": "*/*" };
+    const payload = { "date": date, "column": column, "id": invId };
 
     try {
-        const response = await axios.post(dataUrl, payload, { 
-            headers: headers, 
-            timeout: 20000 
-        });
-        
+        const response = await axios.post(dataUrl, payload, { headers: headers, timeout: 20000 });
         const apiData = response.data;
         
         const newPowerData = new PowerData({
@@ -169,13 +126,11 @@ app.post('/api/goodwe/data', authenticateToken, async (req, res) => {
         res.status(200).json(apiData);
     } catch (error) {
         console.error('Erro ao processar a requisição:', error.message);
-        res.status(500).json({ 
-            message: 'Erro interno ao processar a requisição.' 
-        });
+        res.status(500).json({ message: 'Erro interno ao processar a requisição.' });
     }
 });
+
 
 app.listen(port, () => {
     console.log(`✅ Serviço de integração da GoodWe rodando em http://localhost:${port}`);
 });
-console.log('--- TESTE DE CARGA BEM-SUCEDIDA v7.0 ---');
