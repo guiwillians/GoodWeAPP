@@ -1,20 +1,24 @@
-// goodwe_integration.js - VERSÃO FINAL REESTRUTURADA
+// goodwe_integration.js - SEM JWT
 require('dotenv').config();
 
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3001;
-const SEMS_BASE_URL = 'https://us.semsportal.com';
+const SEMS_BASE_URL = 'https://eu.semsportal.com';
 
-// --- DEFINIÇÕES DO MONGODB (Schema e Model) ---
+// --- CONEXÃO COM O BANCO DE DADOS ---
+const DB_URI = process.env.DB_URI;
+mongoose.connect(DB_URI)
+    .then(() => console.log('✅ Serviço de Integração conectado ao MongoDB'))
+    .catch(err => console.error('Erro de conexão ao MongoDB:', err));
+
+// Esquema para os dados da powerstation
 const powerDataSchema = new mongoose.Schema({
-    // Usamos String para userId aqui para compatibilidade mais fácil com o ID fixo de teste
-    userId: { type: String, required: true }, 
+    userId: { type: String, required: true }, // Mantido como String para o ID fixo
     invId: { type: String, required: true },
     data: { type: Object, required: true },
     timestamp: { type: Date, default: Date.now }
@@ -24,27 +28,15 @@ const PowerData = mongoose.model('PowerData', powerDataSchema);
 app.use(cors());
 app.use(express.json());
 
-
-// --- ROTAS DE ACESSO PÚBLICO E TESTE (Devem vir primeiro) ---
+// --- ROTAS DE ACESSO LIVRE ---
 
 // Rota de health check (GET /health)
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
 });
 
-// Rota de teste JWT (POST /auth/login)
-app.post('/auth/login', (req, res) => {
-    const user = { userId: '65f6c825a0a38b251b32e08e' }; 
-    const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token });
-});
-
-
-// -------------------------------------------------------------------
-// --- ROTA CONSOLIDADA DE DADOS GOODWE (Sem JWT) ---
-// -------------------------------------------------------------------
-
-app.post('/api/goodwe/data', async (req, res) => { 
+// Rota Consolidada: Login GoodWe + Busca Dados + Salvar MongoDB (ACESSO LIVRE)
+app.post('/api/goodwe/data', async (req, res) => {
     // Aceita credenciais no body
     const { account, pwd, invId, column, date } = req.body;
 
@@ -60,55 +52,43 @@ app.post('/api/goodwe/data', async (req, res) => {
     const loginPayload = { "account": account, "pwd": pwd, "is_local": false };
 
     try {
-        // Tenta obter o semsToken (Login GoodWe)
-        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 2000 });
+        // Tenta obter o semsToken
+        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 5000 });
         const semsData = loginResponse.data;
         
-        // ... (Verificação de código de sucesso) ...
+        if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
+            // Se o login GoodWe falhar, retorna o erro 401
+            return res.status(401).json({ message: 'Falha no login com a API GoodWe. Verifique as credenciais.', details: semsData });
+        }
         
-        // ... (O restante da lógica de busca e salvamento no MongoDB) ...
+        const semsToken = Buffer.from(JSON.stringify(semsData.data)).toString('base64');
+        // --- FIM DA AUTENTICAÇÃO ---
 
+        // 2. BUSCAR DADOS USANDO O TOKEN OBTIDO
+        const dataUrl = `${SEMS_BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
+        const dataHeaders = { "Token": semsToken, "Content-Type": "application/json", "Accept": "*/*" };
+        const dataPayload = { "date": date, "column": column, "id": invId };
+
+        const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
+        const apiData = response.data;
+        
+        // 3. SALVAR NO MONGODB (ID fixo, pois não há login de usuário)
+        const newPowerData = new PowerData({
+            userId: '65f6c825a0a38b251b32e08e', 
+            invId: invId,
+            data: apiData
+        });
+        await newPowerData.save();
+        
         res.status(200).json(apiData);
 
     } catch (error) {
-        // --- CAPTURA DE ERRO ROBUSTA ---
-        console.error('❌ ERRO CRÍTICO NA REQUISIÇÃO GOODWE:', error.message);
-        
-        let errorMessage = 'Erro ao tentar fazer login na API GoodWe.';
-        
-        // Se for um erro de rede (Timeout, DNS, etc.)
-        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-            errorMessage = 'Falha de conexão com a API GoodWe. Verifique o servidor.';
-        }
-        // Se for um erro de resposta HTTP (401, 500, etc.)
-        else if (error.response && error.response.data) {
-            // Se a GoodWe retornou um erro estruturado, mostre-o.
-            return res.status(error.response.status).json({
-                message: 'Falha no login com a API GoodWe.', 
-                details: error.response.data
-            });
-        }
-        
-        // Erro genérico
-        res.status(500).json({ message: errorMessage });
+        console.error('❌ Erro ao processar a requisição:', error.message);
+        res.status(500).json({ message: 'Erro interno ao processar a requisição.' });
     }
 });
 
 
-// -------------------------------------------------------------------
-// --- INÍCIO DO SERVIDOR APÓS O MONGO DB CONECTAR (FIX DO TIMEOUT) ---
-// -------------------------------------------------------------------
-
-const DB_URI = process.env.DB_URI;
-mongoose.connect(DB_URI)
-    .then(() => {
-        console.log('✅ Serviço de Integração conectado ao MongoDB');
-        // APENAS INICIA O SERVIDOR DEPOIS QUE O MONGO ESTÁ CONECTADO
-        app.listen(port, () => {
-            console.log(`✅ Servidor rodando em http://localhost:${port}`);
-        });
-    })
-    .catch(err => {
-        console.error('❌ Erro de conexão FATAL ao MongoDB:', err.message);
-        process.exit(1); 
-    });
+app.listen(port, () => {
+    console.log(`✅ Serviço de integração da GoodWe rodando em http://localhost:${port}`);
+});

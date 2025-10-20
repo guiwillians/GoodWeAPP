@@ -1,2 +1,14 @@
 .node_modules
 .env
+# Dependências Node
+node_modules/
+package-lock.json
+
+# Ambientes Python
+.venv/
+__pycache__/
+
+# Arquivos de log e cache
+*.log
+.DS_Store
+npm-debug.log*
