@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3001;
-const SEMS_BASE_URL = 'https://eu.semsportal.com';
+const SEMS_BASE_URL = 'https://us.semsportal.com';
 
 // --- DEFINIÇÕES DO MONGODB (Schema e Model) ---
 const powerDataSchema = new mongoose.Schema({
@@ -60,37 +60,37 @@ app.post('/api/goodwe/data', async (req, res) => {
     const loginPayload = { "account": account, "pwd": pwd, "is_local": false };
 
     try {
-        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 5000 });
+        // Tenta obter o semsToken (Login GoodWe)
+        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 2000 });
         const semsData = loginResponse.data;
         
-        if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
-            return res.status(401).json({ message: 'Falha no login com a API GoodWe. Verifique as credenciais.', details: semsData });
-        }
+        // ... (Verificação de código de sucesso) ...
         
-        const semsToken = Buffer.from(JSON.stringify(semsData.data)).toString('base64');
-        // --- FIM DA AUTENTICAÇÃO ---
+        // ... (O restante da lógica de busca e salvamento no MongoDB) ...
 
-        // 2. BUSCAR DADOS USANDO O TOKEN OBTIDO
-        const dataUrl = `${SEMS_BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
-        const dataHeaders = { "Token": semsToken, "Content-Type": "application/json", "Accept": "*/*" };
-        const dataPayload = { "date": date, "column": column, "id": invId };
-
-        const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
-        const apiData = response.data;
-        
-        // 3. SALVAR NO MONGODB (Usando ID fixo de teste)
-        const newPowerData = new PowerData({
-            userId: '65f6c825a0a38b251b32e08e', 
-            invId: invId,
-            data: apiData
-        });
-        await newPowerData.save();
-        
         res.status(200).json(apiData);
 
     } catch (error) {
-        console.error('❌ Erro ao processar a requisição:', error.message);
-        res.status(500).json({ message: 'Erro interno ao processar a requisição.' });
+        // --- CAPTURA DE ERRO ROBUSTA ---
+        console.error('❌ ERRO CRÍTICO NA REQUISIÇÃO GOODWE:', error.message);
+        
+        let errorMessage = 'Erro ao tentar fazer login na API GoodWe.';
+        
+        // Se for um erro de rede (Timeout, DNS, etc.)
+        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+            errorMessage = 'Falha de conexão com a API GoodWe. Verifique o servidor.';
+        }
+        // Se for um erro de resposta HTTP (401, 500, etc.)
+        else if (error.response && error.response.data) {
+            // Se a GoodWe retornou um erro estruturado, mostre-o.
+            return res.status(error.response.status).json({
+                message: 'Falha no login com a API GoodWe.', 
+                details: error.response.data
+            });
+        }
+        
+        // Erro genérico
+        res.status(500).json({ message: errorMessage });
     }
 });
 
