@@ -1,4 +1,4 @@
-// goodwe_integration.js - VERSÃO FINAL SIMPLIFICADA PARA FRONTEND
+// goodwe_integration.js - VERSÃO FINAL REESTRUTURADA
 require('dotenv').config();
 
 const express = require('express');
@@ -9,16 +9,12 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 const port = process.env.PORT || 3001;
+const SEMS_BASE_URL = 'https://eu.semsportal.com';
 
-// --- CONEXÃO COM O BANCO DE DADOS (Inicia antes do servidor) ---
-const DB_URI = process.env.DB_URI;
-mongoose.connect(DB_URI)
-    .then(() => console.log('✅ Serviço de Integração conectado ao MongoDB'))
-    .catch(err => console.error('Erro de conexão ao MongoDB:', err));
-
-// Esquema e Model (Mantidos para o MongoDB)
+// --- DEFINIÇÕES DO MONGODB (Schema e Model) ---
 const powerDataSchema = new mongoose.Schema({
-    userId: { type: mongoose.Schema.Types.ObjectId, required: true },
+    // Usamos String para userId aqui para compatibilidade mais fácil com o ID fixo de teste
+    userId: { type: String, required: true }, 
     invId: { type: String, required: true },
     data: { type: Object, required: true },
     timestamp: { type: Date, default: Date.now }
@@ -28,17 +24,29 @@ const PowerData = mongoose.model('PowerData', powerDataSchema);
 app.use(cors());
 app.use(express.json());
 
-// URL base da API do SEMS Portal
-const SEMS_BASE_URL = 'https://eu.semsportal.com';
+
+// --- ROTAS DE ACESSO PÚBLICO E TESTE (Devem vir primeiro) ---
+
+// Rota de health check (GET /health)
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
+});
+
+// Rota de teste JWT (POST /auth/login)
+app.post('/auth/login', (req, res) => {
+    const user = { userId: '65f6c825a0a38b251b32e08e' }; 
+    const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.json({ token });
+});
 
 
 // -------------------------------------------------------------------
-// --- ROTA ÚNICA E PODEROSA (NÃO PRECISA DE JWT) ---
+// --- ROTA CONSOLIDADA DE DADOS GOODWE (Sem JWT) ---
 // -------------------------------------------------------------------
 
-// Rota Consolidada: Login GoodWe + Busca Dados + Salvar MongoDB
-app.post('/api/goodwe/data', async (req, res) => { // <-- REMOVIDO: authenticateToken
-    const { account, pwd, invId, column, date } = req.body; // Aceita credenciais no body
+app.post('/api/goodwe/data', async (req, res) => { 
+    // Aceita credenciais no body
+    const { account, pwd, invId, column, date } = req.body;
 
     if (!account || !pwd || !invId || !column || !date) {
         return res.status(400).json({ message: 'Credenciais e parâmetros necessários faltando.' });
@@ -52,7 +60,7 @@ app.post('/api/goodwe/data', async (req, res) => { // <-- REMOVIDO: authenticate
     const loginPayload = { "account": account, "pwd": pwd, "is_local": false };
 
     try {
-        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 20000 });
+        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 5000 });
         const semsData = loginResponse.data;
         
         if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
@@ -70,9 +78,9 @@ app.post('/api/goodwe/data', async (req, res) => { // <-- REMOVIDO: authenticate
         const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
         const apiData = response.data;
         
-        // 3. SALVAR NO MONGODB (Usando ID fixo para teste)
+        // 3. SALVAR NO MONGODB (Usando ID fixo de teste)
         const newPowerData = new PowerData({
-            userId: '65f6c825a0a38b251b32e08e', // ID fixo de teste
+            userId: '65f6c825a0a38b251b32e08e', 
             invId: invId,
             data: apiData
         });
@@ -81,32 +89,26 @@ app.post('/api/goodwe/data', async (req, res) => { // <-- REMOVIDO: authenticate
         res.status(200).json(apiData);
 
     } catch (error) {
-        console.error('Erro ao processar a requisição:', error.message);
+        console.error('❌ Erro ao processar a requisição:', error.message);
         res.status(500).json({ message: 'Erro interno ao processar a requisição.' });
     }
 });
+
+
+// -------------------------------------------------------------------
+// --- INÍCIO DO SERVIDOR APÓS O MONGO DB CONECTAR (FIX DO TIMEOUT) ---
 // -------------------------------------------------------------------
 
-
-// --- ROTAS AUXILIARES ---
-
-// Rota para gerar o Token JWT (MANTIDA para outras rotas protegidas)
-app.post('/auth/login', (req, res) => {
-    const user = { userId: '65f6c825a0a38b251b32e08e' }; 
-    const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token });
-});
-
-// Middleware de autenticação (MANTIDO para proteger /tuya e outros)
-const authenticateToken = (req, res, next) => {
-    // ... (sua lógica JWT) ...
-};
-
-// Rota de health check
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
-});
-
-app.listen(port, () => {
-    console.log(`✅ Serviço de integração da GoodWe rodando em http://localhost:${port}`);
-});
+const DB_URI = process.env.DB_URI;
+mongoose.connect(DB_URI)
+    .then(() => {
+        console.log('✅ Serviço de Integração conectado ao MongoDB');
+        // APENAS INICIA O SERVIDOR DEPOIS QUE O MONGO ESTÁ CONECTADO
+        app.listen(port, () => {
+            console.log(`✅ Servidor rodando em http://localhost:${port}`);
+        });
+    })
+    .catch(err => {
+        console.error('❌ Erro de conexão FATAL ao MongoDB:', err.message);
+        process.exit(1); 
+    });
