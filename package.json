@@ -1,29 +1,21 @@
 {
-  "name": "goodweapp",
+  "name": "goodweapp-backend",
   "version": "1.0.0",
-  "description": "⚡ GoodWe App: Hub de Automação e Monitoramento de Energia\r 1. Visão Geral do Projeto (GoodWe App)\r O GoodWe App é uma solução de backend modular desenvolvida para integrar sistemas de energia renovável (inversores GoodWe) com automação residencial (dispositivos Tuya). O objetivo é fornecer uma API unificada para que um aplicativo frontend (FlutterFlow) possa monitorar a geração solar, obter o status da bateria e enviar comandos inteligentes para tomadas ou lâmpadas, tudo através de um único ponto de acesso seguro.",
-  "main": "auth_middleware.js",
- "scripts": {
+  "description": "API para GoodWe e Tuya",
+  "main": "goodwe_integration.js",
+  "scripts": {
     "start": "node goodwe_integration.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/guiwillians/GoodWeAPP.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/guiwillians/GoodWeAPP/issues"
-  },
-  "homepage": "https://github.com/guiwillians/GoodWeAPP#readme",
   "dependencies": {
-    "axios": "^1.12.2",
+    "axios": "^1.7.2",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.19.2"
+    "mongoose": "^8.4.1",
+    "ask-sdk-core": "^2.14.0",
+    "ask-sdk-express-adapter": "^2.14.0",
+    "@tuya/tuya-connector-nodejs": "^2.1.2"
   }
 }

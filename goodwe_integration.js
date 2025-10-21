@@ -1,6 +1,6 @@
-// goodwe_integration.js - VERSÃO FINAL SEM JWT (FOCO GOODWE)
+// goodwe_integration.js - VERSÃO FINAL (PARA RENDER/VERCEL + FLUTTERFLOW)
 require('dotenv').config();
-console.log('--- 1. dotenv carregado ---'); // Log inicial
+console.log('--- 1. dotenv carregado ---');
 
 const express = require('express');
 const axios = require('axios');
@@ -10,8 +10,8 @@ const mongoose = require('mongoose');
 console.log('--- 2. Módulos carregados ---');
 
 const app = express();
-const port = process.env.PORT || 3001; // Render usa process.env.PORT
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com';
+const port = process.env.PORT || 3001; // Render/Vercel usam process.env.PORT
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com'; // Região 'eu' para o Brasil
 
 // --- MIDDLEWARES (Antes das Rotas) ---
 console.log('--- 3. Configurando Middlewares ---');
@@ -42,7 +42,7 @@ console.log('--- 6. Definindo Rota /api/goodwe/data ---');
 app.post('/api/goodwe/data', async (req, res) => {
     // Aceita credenciais no body
     const { account, pwd, invId, column, date } = req.body;
-    console.log(`[${new Date().toISOString()}] Recebida requisição para /api/goodwe/data`);
+    console.log(`[LOG] Recebida requisição para /api/goodwe/data (Coluna: ${column})`);
 
     if (!account || !pwd || !invId || !column || !date) {
         console.warn('-> Parâmetros faltando na requisição.');
@@ -58,13 +58,11 @@ app.post('/api/goodwe/data', async (req, res) => {
 
     try {
         console.log('-> Tentando login na API GoodWe...');
-        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 15000 }); // Timeout 15s
+        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 15000 });
         const semsData = loginResponse.data;
-        console.log('-> Resposta do Login GoodWe:', semsData.code, semsData.msg);
 
-        // Se o login falhar (qualquer código que não seja sucesso)
         if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
-            console.error('-> Falha no Login GoodWe:', semsData);
+            console.error('-> Falha no Login GoodWe (Credenciais Inválidas):', semsData);
             return res.status(401).json({ message: 'Falha no login com a API GoodWe. Verifique as credenciais.', details: semsData });
         }
 
@@ -81,20 +79,19 @@ app.post('/api/goodwe/data', async (req, res) => {
         const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
         const apiData = response.data;
         
-        // Se a busca de DADOS falhar (aqui que o erro 100002 acontece)
+        // Se a busca de DADOS falhar (aqui que o erro 100002 costuma acontecer)
         if (apiData.code !== 0) {
-            console.error('-> Falha na busca de dados GoodWe:', apiData);
+            console.error('-> Falha na busca de dados GoodWe (Token Expirado?):', apiData);
             return res.status(401).json({ message: 'Falha ao buscar dados da GoodWe (Token pode ter expirado).', details: apiData });
         }
         
         console.log('-> Dados da GoodWe recebidos.');
 
         // 3. SALVAR NO MONGODB (ID fixo)
-        console.log('-> Tentando salvar no MongoDB...');
         const newPowerData = new PowerData({
             userId: '65f6c825a0a38b251b32e08e', // ID fixo de teste
             invId: invId,
-            data: apiData 
+            data: apiData // Salva a resposta completa
         });
         await newPowerData.save();
         console.log('✅ Dados salvos no MongoDB com sucesso.');
@@ -109,18 +106,18 @@ app.post('/api/goodwe/data', async (req, res) => {
 
 
 // --- INICIALIZAÇÃO DO SERVIDOR (APÓS CONEXÃO COM O MONGO DB) ---
+// FIXO: Isso resolve o erro de 'buffering timed out'
 const DB_URI = process.env.DB_URI;
+console.log('--- 7. Conectando ao MongoDB... ---');
 mongoose.connect(DB_URI)
     .then(() => {
         console.log('✅ Serviço de Integração conectado ao MongoDB');
         // APENAS INICIA O SERVIDOR DEPOIS QUE O MONGO ESTÁ CONECTADO
         app.listen(port, () => {
-            console.log(`✅ Servidor rodando na porta ${port}`); // Log Final de Sucesso
+            console.log(`✅ Servidor rodando na porta ${port}`);
         });
     })
     .catch(err => {
         console.error('❌ Erro de conexão FATAL ao MongoDB:', err.message);
         process.exit(1); // Encerra a aplicação se não conseguir conectar ao DB
     });
-
-console.log('--- 7. Configuração do servidor concluída, aguardando MongoDB... ---');
