@@ -1,4 +1,4 @@
-// goodwe_integration.js - VERSÃO FINAL (PARA RENDER/VERCEL + FLUTTERFLOW)
+// goodwe_integration.js - VERSÃO FINAL SEM JWT
 require('dotenv').config();
 console.log('--- 1. dotenv carregado ---');
 
@@ -58,9 +58,10 @@ app.post('/api/goodwe/data', async (req, res) => {
 
     try {
         console.log('-> Tentando login na API GoodWe...');
-        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 15000 });
+        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 15000 }); // Timeout 15s
         const semsData = loginResponse.data;
 
+        // Se o login falhar (qualquer código que não seja sucesso)
         if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
             console.error('-> Falha no Login GoodWe (Credenciais Inválidas):', semsData);
             return res.status(401).json({ message: 'Falha no login com a API GoodWe. Verifique as credenciais.', details: semsData });
@@ -79,7 +80,7 @@ app.post('/api/goodwe/data', async (req, res) => {
         const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
         const apiData = response.data;
         
-        // Se a busca de DADOS falhar (aqui que o erro 100002 costuma acontecer)
+        // Se a busca de DADOS falhar (aqui que o erro 100002 acontece)
         if (apiData.code !== 0) {
             console.error('-> Falha na busca de dados GoodWe (Token Expirado?):', apiData);
             return res.status(401).json({ message: 'Falha ao buscar dados da GoodWe (Token pode ter expirado).', details: apiData });
@@ -88,6 +89,7 @@ app.post('/api/goodwe/data', async (req, res) => {
         console.log('-> Dados da GoodWe recebidos.');
 
         // 3. SALVAR NO MONGODB (ID fixo)
+        console.log('-> Tentando salvar no MongoDB...');
         const newPowerData = new PowerData({
             userId: '65f6c825a0a38b251b32e08e', // ID fixo de teste
             invId: invId,
@@ -100,6 +102,10 @@ app.post('/api/goodwe/data', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Erro CRÍTICO ao processar a requisição:', error.message);
+        // Log detalhado do erro axios se disponível
+        if (error.response) {
+            console.error("Detalhes do erro Axios:", error.response.status, error.response.data);
+        }
         res.status(500).json({ message: 'Erro interno ao processar a requisição.' });
     }
 });
