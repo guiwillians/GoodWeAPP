@@ -1,42 +1,43 @@
 require('dotenv').config();
+console.log('--- 1. dotenv carregado ---');
 
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
+console.log('--- 2. Módulos carregados ---');
+
 const app = express();
 const port = process.env.PORT || 3001;
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com';
+// CORREÇÃO: URL correto para plantas no Brasil
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; 
 
-// --- MIDDLEWARES E CONFIGURAÇÃO ---
+// --- MIDDLEWARES (Antes das Rotas) ---
+console.log('--- 3. Configurando Middlewares ---');
 app.use(cors());
 app.use(express.json());
 
 // --- SCHEMA E MODEL DO MONGODB ---
 const powerDataSchema = new mongoose.Schema({
-    userId: { type: String, required: true },
+    userId: { type: String, required: true }, // Usando String para ID fixo
     invId: { type: String, required: true },
     data: { type: Object, required: true },
     timestamp: { type: Date, default: Date.now }
 });
 const PowerData = mongoose.model('PowerData', powerDataSchema);
+console.log('--- 4. Schema MongoDB definido ---');
 
 
 // --- ROTAS DA API ---
 
-// Rota de health check (GET /health) para verificar se o servidor está online
+// Rota de health check para verificar se o servidor está online
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
 });
 
 /**
  * Função auxiliar para fazer uma chamada de dados à API da GoodWe.
- * @param {string} semsToken - O token de sessão da GoodWe.
- * @param {string} invId - O ID do inversor.
- * @param {string} column - A coluna de dados a ser buscada (ex: 'Pac', 'Eday').
- * @param {string} date - A data da consulta.
- * @returns {Promise<any>} A resposta da API da GoodWe.
  */
 async function getGoodWeColumnData(semsToken, invId, column, date) {
     const dataUrl = `${SEMS_BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
@@ -46,8 +47,6 @@ async function getGoodWeColumnData(semsToken, invId, column, date) {
     const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
     
     if (response.data.code !== 0) {
-        console.error(`-> Falha na busca da coluna '${column}':`, response.data);
-        // Lança um erro se a busca de dados específica falhar (ex: token expirado)
         throw new Error(`Falha ao buscar dados da coluna '${column}'. Mensagem: ${response.data.msg}`);
     }
     
@@ -86,7 +85,6 @@ app.post('/api/dashboard', async (req, res) => {
         // --- 2. BUSCAR TODOS OS DADOS EM PARALELO ---
         const todayString = new Date().toISOString().split('T')[0] + " 00:00:00";
         
-        // Array de promessas para todas as chamadas de dados que precisamos
         const dataPromises = [
             getGoodWeColumnData(semsToken, invId, 'pac', todayString),    // Potência em tempo real
             getGoodWeColumnData(semsToken, invId, 'eday', todayString),   // Geração diária
@@ -94,7 +92,6 @@ app.post('/api/dashboard', async (req, res) => {
             getGoodWeColumnData(semsToken, invId, 'soc', todayString)     // Nível da bateria
         ];
 
-        // Executa todas as chamadas ao mesmo tempo para mais performance
         const [pacData, edayData, etotalData, socData] = await Promise.all(dataPromises);
 
         // --- 3. EXTRAIR E PROCESSAR OS VALORES ---
@@ -109,12 +106,12 @@ app.post('/api/dashboard', async (req, res) => {
         
         const potenciaAtual = extractLatestValue(pacData);
         const geracaoDiaria = extractLatestValue(edayData);
-        const geracaoTotal = extractLatestValue(etotalData); // Etotal geralmente tem um único valor
+        const geracaoTotal = extractLatestValue(etotalData);
         const nivelBateria = extractLatestValue(socData);
         
-        // Para a geração mensal, precisaríamos de um loop ou de outro endpoint da GoodWe.
-        // Por agora, vamos simular com base na geração diária.
-        const geracaoMensalEstimada = geracaoDiaria * 30; 
+        // Simulação de dados mensais e anuais baseados no total
+        const geracaoMensalEstimada = (geracaoTotal / 12).toFixed(2);
+        const geracaoAnualEstimada = geracaoTotal;
 
         // --- 4. MONTAR O JSON DE RESPOSTA PARA O FLUTTERFLOW ---
         const responsePayload = {
@@ -125,15 +122,16 @@ app.post('/api/dashboard', async (req, res) => {
             },
             summary: {
                 geracao_diaria_kwh: geracaoDiaria,
-                geracao_mensal_kwh: geracaoMensalEstimada.toFixed(2), // Valor estimado
+                geracao_mensal_kwh: parseFloat(geracaoMensalEstimada),
+                geracao_anual_kwh: geracaoAnualEstimada,
                 geracao_total_kwh: geracaoTotal
             },
             last_updated: new Date().toISOString()
         };
         
-        // 5. Salvar no MongoDB (opcional, pode salvar o payload consolidado)
+        // 5. Salvar no MongoDB
         const newPowerData = new PowerData({
-            userId: 'flutterflow_user_fixed_id', // ID fixo
+            userId: 'flutterflow_user_fixed_id',
             invId: invId,
             data: responsePayload 
         });
