@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3001;
 // Usamos 'eu' para inversores no Brasil, que é o endpoint mais estável
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com'; 
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; 
 
 // --- MIDDLEWARES E CONFIGURAÇÃO ---
 app.use(cors());
