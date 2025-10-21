@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3001;
 // Usamos 'eu' para inversores no Brasil, que é o endpoint mais estável
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; 
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com'; 
 
 // --- MIDDLEWARES E CONFIGURAÇÃO ---
 app.use(cors());
@@ -88,8 +88,11 @@ app.post('/api/dashboard', async (req, res) => {
         const [pacData, edayData, etotalData, cbattery1Data] = await Promise.all(dataPromises);
 
         // --- 3. EXTRAIR E PROCESSAR OS VALORES ---
-        const extractLatestValue = (apiData) => {
+        const extractLatestValue = (apiData, columnName) => {
             const dataArray = apiData?.data?.column1 || [];
+            // NOVO LOG DE DIAGNÓSTICO
+            console.log(`[DIAGNÓSTICO] Para a coluna '${columnName}', a GoodWe retornou ${dataArray.length} pontos de dados.`);
+
             if (dataArray.length > 0) {
                 const lastPoint = dataArray[dataArray.length - 1];
                 return parseFloat(lastPoint.column) || 0;
@@ -97,10 +100,10 @@ app.post('/api/dashboard', async (req, res) => {
             return 0;
         };
         
-        const potenciaAtual = extractLatestValue(pacData);
-        const geracaoDiaria = extractLatestValue(edayData);
-        const geracaoTotal = extractLatestValue(etotalData);
-        const nivelBateria = extractLatestValue(cbattery1Data);
+        const potenciaAtual = extractLatestValue(pacData, 'pac');
+        const geracaoDiaria = extractLatestValue(edayData, 'eday');
+        const geracaoTotal = extractLatestValue(etotalData, 'etotal');
+        const nivelBateria = extractLatestValue(cbattery1Data, 'Cbattery1');
         
         // Simulação da Geração Mensal e Anual
         const geracaoMensalEstimada = geracaoDiaria * 30; 
@@ -153,4 +156,3 @@ mongoose.connect(DB_URI)
         console.error('❌ Erro de conexão FATAL ao MongoDB:', err.message);
         process.exit(1);
     });
-
