@@ -11,7 +11,7 @@ console.log('--- 2. Módulos carregados ---');
 
 const app = express();
 const port = process.env.PORT || 3001; // Render/Vercel usam process.env.PORT
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com'; // Região 'eu' para o Brasil
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; // Região 'eu' para o Brasil
 
 // --- MIDDLEWARES (Antes das Rotas) ---
 console.log('--- 3. Configurando Middlewares ---');
