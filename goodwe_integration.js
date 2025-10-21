@@ -1,4 +1,3 @@
-// goodwe_integration.js - VERSÃO FINAL COM ROTA DE DASHBOARD COMPLETA
 require('dotenv').config();
 
 const express = require('express');
@@ -9,7 +8,7 @@ const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3001;
 // Usamos 'eu' para inversores no Brasil, que é o endpoint mais estável
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; 
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com'; 
 
 // --- MIDDLEWARES E CONFIGURAÇÃO ---
 app.use(cors());
@@ -79,7 +78,6 @@ app.post('/api/dashboard', async (req, res) => {
         const todayString = new Date().toISOString().split('T')[0] + " 00:00:00";
         
         // Colunas: Potência (Pac), Energia Diária (Eday), Energia Total (Etotal), Bateria (Cbattery1)
-        // OBS: Cbattery1 é o nome da coluna para o nível da bateria, conforme solicitado.
         const columnsToFetch = ['pac', 'eday', 'etotal', 'Cbattery1']; 
         
         const dataPromises = columnsToFetch.map(column => 
@@ -102,9 +100,9 @@ app.post('/api/dashboard', async (req, res) => {
         const potenciaAtual = extractLatestValue(pacData);
         const geracaoDiaria = extractLatestValue(edayData);
         const geracaoTotal = extractLatestValue(etotalData);
-        const nivelBateria = extractLatestValue(cbattery1Data); // O valor de Cbattery1 é a porcentagem
-
-        // Simulação da Geração Mensal e Anual (Melhoria para dashboards)
+        const nivelBateria = extractLatestValue(cbattery1Data);
+        
+        // Simulação da Geração Mensal e Anual
         const geracaoMensalEstimada = geracaoDiaria * 30; 
         const geracaoAnualEstimada = geracaoMensalEstimada * 12;
 
@@ -155,3 +153,4 @@ mongoose.connect(DB_URI)
         console.error('❌ Erro de conexão FATAL ao MongoDB:', err.message);
         process.exit(1);
     });
+
