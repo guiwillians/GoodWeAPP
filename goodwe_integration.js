@@ -89,7 +89,7 @@ app.post('/api/dashboard', async (req, res) => {
             getGoodWeColumnData(semsToken, invId, 'pac', todayString),    // Potência em tempo real
             getGoodWeColumnData(semsToken, invId, 'eday', todayString),   // Geração diária
             getGoodWeColumnData(semsToken, invId, 'etotal', todayString), // Geração total (vida útil)
-            getGoodWeColumnData(semsToken, invId, 'soc', todayString)     // Nível da bateria
+            getGoodWeColumnData(semsToken, invId, 'Cbattery1', todayString)     // Nível da bateria
         ];
 
         const [pacData, edayData, etotalData, socData] = await Promise.all(dataPromises);
