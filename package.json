@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "⚡ GoodWe App: Hub de Automação e Monitoramento de Energia\r 1. Visão Geral do Projeto (GoodWe App)\r O GoodWe App é uma solução de backend modular desenvolvida para integrar sistemas de energia renovável (inversores GoodWe) com automação residencial (dispositivos Tuya). O objetivo é fornecer uma API unificada para que um aplicativo frontend (FlutterFlow) possa monitorar a geração solar, obter o status da bateria e enviar comandos inteligentes para tomadas ou lâmpadas, tudo através de um único ponto de acesso seguro.",
   "main": "auth_middleware.js",
-  "scripts": {
+ "scripts": {
+    "start": "node goodwe_integration.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
