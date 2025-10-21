@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 
 const app = express();
 const port = process.env.PORT || 3001;
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com'; // 'eu' para o Brasil
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; // 'eu' para o Brasil
 
 // --- MIDDLEWARES E CONFIGURAÇÃO ---
 app.use(cors());
