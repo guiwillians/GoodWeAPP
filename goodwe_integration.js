@@ -35,8 +35,8 @@ async function getGoodWeColumnData(semsToken, invId, column, date) {
 
     const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
     
+    // Um código diferente de 0 é um erro na API da GoodWe
     if (response.data.code !== 0) {
-        // Se a GoodWe falhar, lançamos um erro com a mensagem dela
         throw new Error(`Falha ao buscar dados da coluna '${column}'. Mensagem: ${response.data.msg}. Código: ${response.data.code}`);
     }
     
@@ -77,19 +77,28 @@ app.post('/api/dashboard', async (req, res) => {
         // --- 2. BUSCAR TODOS OS DADOS REAIS EM PARALELO ---
         const todayString = new Date().toISOString().split('T')[0] + " 00:00:00";
         
-        // Colunas: Potência (pac), Energia Diária (eday), Energia Total (etotal), Bateria (Cbattery1)
         const columnsToFetch = ['pac', 'eday', 'etotal', 'Cbattery1']; 
         
         const dataPromises = columnsToFetch.map(column => 
             getGoodWeColumnData(semsToken, invId, column, todayString)
         );
 
-        // Aguarda todas as requisições
-        const [pacData, edayData, etotalData, cbattery1Data] = await Promise.all(dataPromises);
+        // Usamos allSettled para que, mesmo se uma chamada falhar, as outras continuem
+        const results = await Promise.allSettled(dataPromises);
 
         // --- 3. EXTRAIR E PROCESSAR OS VALORES ---
-        const extractLatestValue = (apiData) => {
+        const extractLatestValue = (promiseResult, columnName) => {
+            // Se a promessa foi rejeitada (erro na chamada da API)
+            if (promiseResult.status === 'rejected') {
+                console.error(`[DIAGNÓSTICO] Falha ao buscar a coluna '${columnName}':`, promiseResult.reason.message);
+                return 0; // Retorna 0 se a promessa foi rejeitada
+            }
+            
+            const apiData = promiseResult.value;
             const dataArray = apiData?.data?.column1 || [];
+            
+            console.log(`[DIAGNÓSTICO] Para a coluna '${columnName}', a GoodWe retornou ${dataArray.length} pontos de dados.`);
+
             if (dataArray.length > 0) {
                 const lastPoint = dataArray[dataArray.length - 1];
                 return parseFloat(lastPoint.column) || 0;
@@ -97,18 +106,22 @@ app.post('/api/dashboard', async (req, res) => {
             return 0;
         };
         
-        const potenciaAtual = extractLatestValue(pacData);
-        const geracaoDiaria = extractLatestValue(edayData);
-        const geracaoTotal = extractLatestValue(etotalData);
-        const nivelBateria = extractLatestValue(cbattery1Data);
+        const [pacResult, edayResult, etotalResult, cbattery1Result] = results;
 
-        // Cálculo da Geração Mensal e Anual (Estimado)
+        const potenciaAtual = extractLatestValue(pacResult, 'pac');
+        const geracaoDiaria = extractLatestValue(edayResult, 'eday');
+        const geracaoTotal = extractLatestValue(etotalResult, 'etotal');
+        const nivelBateria = extractLatestValue(cbattery1Result, 'Cbattery1');
+        
+        // Simulação da Geração Mensal e Anual
         const geracaoMensalEstimada = geracaoDiaria * 30; 
-        const geracaoAnualEstimada = geracaoMensalEstimada * 12;
+        const geracaoAnualEstimada = geracaoDiaria * 365; // Corrigido para 365
 
         // --- 4. MONTAR O JSON DE RESPOSTA PARA O FLUTTERFLOW ---
         const responsePayload = {
             ok: true,
+            // NOVO CAMPO DE STATUS PARA DEBUG
+            data_status: potenciaAtual > 0 || geracaoDiaria > 0 ? "real" : "fallback_or_offline",
             realtime: {
                 potencia_atual_w: potenciaAtual, 
                 nivel_bateria_percent: nivelBateria 
@@ -125,7 +138,7 @@ app.post('/api/dashboard', async (req, res) => {
         
         // 5. Salvar no MongoDB
         const newPowerData = new PowerData({
-            userId: 'flutterflow_user_fixed_id', // ID fixo para todos os registros
+            userId: 'flutterflow_user_fixed_id',
             invId: invId,
             data: responsePayload 
         });
@@ -153,3 +166,4 @@ mongoose.connect(DB_URI)
         console.error('❌ Erro de conexão FATAL ao MongoDB:', err.message);
         process.exit(1);
     });
+
