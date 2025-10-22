@@ -8,7 +8,7 @@ const mongoose = require('mongoose');
 const app = express();
 const port = process.env.PORT || 3001;
 // Usamos 'eu' para inversores no Brasil, que é o endpoint mais estável
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; 
+const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://eu.semsportal.com'; 
 
 // --- MIDDLEWARES E CONFIGURAÇÃO ---
 app.use(cors());
@@ -77,7 +77,7 @@ app.post('/api/dashboard', async (req, res) => {
         // --- 2. BUSCAR TODOS OS DADOS REAIS EM PARALELO ---
         const todayString = new Date().toISOString().split('T')[0] + " 00:00:00";
         
-        // Colunas: Potência (Pac), Energia Diária (Eday), Energia Total (Etotal), Bateria (Cbattery1)
+        // Colunas: Potência (pac), Energia Diária (eday), Energia Total (etotal), Bateria (Cbattery1)
         const columnsToFetch = ['pac', 'eday', 'etotal', 'Cbattery1']; 
         
         const dataPromises = columnsToFetch.map(column => 
@@ -88,11 +88,8 @@ app.post('/api/dashboard', async (req, res) => {
         const [pacData, edayData, etotalData, cbattery1Data] = await Promise.all(dataPromises);
 
         // --- 3. EXTRAIR E PROCESSAR OS VALORES ---
-        const extractLatestValue = (apiData, columnName) => {
+        const extractLatestValue = (apiData) => {
             const dataArray = apiData?.data?.column1 || [];
-            // NOVO LOG DE DIAGNÓSTICO
-            console.log(`[DIAGNÓSTICO] Para a coluna '${columnName}', a GoodWe retornou ${dataArray.length} pontos de dados.`);
-
             if (dataArray.length > 0) {
                 const lastPoint = dataArray[dataArray.length - 1];
                 return parseFloat(lastPoint.column) || 0;
@@ -100,12 +97,12 @@ app.post('/api/dashboard', async (req, res) => {
             return 0;
         };
         
-        const potenciaAtual = extractLatestValue(pacData, 'pac');
-        const geracaoDiaria = extractLatestValue(edayData, 'eday');
-        const geracaoTotal = extractLatestValue(etotalData, 'etotal');
-        const nivelBateria = extractLatestValue(cbattery1Data, 'Cbattery1');
-        
-        // Simulação da Geração Mensal e Anual
+        const potenciaAtual = extractLatestValue(pacData);
+        const geracaoDiaria = extractLatestValue(edayData);
+        const geracaoTotal = extractLatestValue(etotalData);
+        const nivelBateria = extractLatestValue(cbattery1Data);
+
+        // Cálculo da Geração Mensal e Anual (Estimado)
         const geracaoMensalEstimada = geracaoDiaria * 30; 
         const geracaoAnualEstimada = geracaoMensalEstimada * 12;
 
@@ -128,7 +125,7 @@ app.post('/api/dashboard', async (req, res) => {
         
         // 5. Salvar no MongoDB
         const newPowerData = new PowerData({
-            userId: 'flutterflow_user_fixed_id',
+            userId: 'flutterflow_user_fixed_id', // ID fixo para todos os registros
             invId: invId,
             data: responsePayload 
         });
