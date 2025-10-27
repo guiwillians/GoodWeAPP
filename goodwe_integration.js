@@ -1,5 +1,7 @@
-// goodwe_api.js - Versão 12 (Híbrida: Mock da Estação + Inversor Real)
-// Esta versão SIMULA os dados da Estação (plantId) e busca os dados REAIS do Inversor (invId).
+// goodwe_api.js - Versão 13 (Login Robusto Multi-Região)
+// Tenta fazer login em TODOS os servidores da GoodWe (us, eu, www) até um funcionar.
+// Mantém a lógica Híbrida (Mock da Estação + Inversor Real).
+
 require('dotenv').config();
 console.log('--- 1. dotenv carregado ---');
 
@@ -12,8 +14,13 @@ console.log('--- 2. Módulos carregados ---');
 
 const app = express();
 const port = process.env.PORT || 3001;
-// Usando 'us' - Sabemos que Login e V1 (Inversor) funcionam aqui
-const BASE_URL = process.env.BASE_URL || 'https://us.semsportal.com'; 
+
+// Lista de servidores para tentar o login
+const SEMS_SERVERS = [
+    'https://us.semsportal.com',
+    'https://eu.semsportal.com',
+    'https://www.semsportal.com'
+];
 
 // --- MIDDLEWARES E CONFIGURAÇÃO ---
 console.log('--- 3. Configurando Middlewares ---');
@@ -33,15 +40,42 @@ console.log('--- 4. Schema MongoDB definido ---');
 
 
 /**
+ * Função auxiliar TENTATIVA de login (Versão 13)
+ * Tenta fazer login em UM servidor específico.
+ */
+async function attemptLogin(baseUrl, account, pwd) {
+    const initialTokenPayload = { "client": "web", "version": "v1.0.0", "language": "en" };
+    const initialToken = Buffer.from(JSON.stringify(initialTokenPayload)).toString('base64');
+    const loginUrl = `${baseUrl}/api/v2/common/crosslogin`;
+    const loginHeaders = { "Token": initialToken, "Content-Type": "application/json", "Accept": "application/json" };
+    const loginPayload = { "account": account, "pwd": pwd, "is_local": false };
+
+    console.log(`-> Tentando login em: ${baseUrl}...`);
+    const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 10000 });
+    const semsData = loginResponse.data;
+
+    if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
+        throw new Error(`Login falhou em ${baseUrl}. Código: ${semsData.code} (${semsData.msg})`);
+    }
+
+    console.log(`✅ Login com sucesso em: ${baseUrl}`);
+    const semsToken = Buffer.from(JSON.stringify(semsData.data)).toString('base64');
+    
+    // Retorna o servidor que funcionou e o token
+    return { workingBaseUrl: baseUrl, semsToken: semsToken };
+}
+
+
+/**
  * Função auxiliar para buscar dados do INVERSOR (coluna única).
  * ESTA É UMA CHAMADA REAL.
  */
-async function getGoodWeColumnData(semsToken, invId, column, date) {
-    const dataUrl = `${BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
+async function getGoodWeColumnData(workingBaseUrl, semsToken, invId, column, date) {
+    const dataUrl = `${workingBaseUrl}/api/PowerStationMonitor/GetInverterDataByColumn`;
     const dataHeaders = { "Token": semsToken, "Content-Type": "application/json", "Accept": "*/*" };
     const dataPayload = { "date": date, "column": column, "id": invId };
 
-    console.log(`[DIAGNÓSTICO] Buscando coluna REAL (Inversor): ${column}...`);
+    console.log(`[DIAGNÓSTICO] Buscando coluna REAL (Inversor): ${column} em ${workingBaseUrl}...`);
     const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
     
     if (response.data.code !== 0) {
@@ -58,27 +92,23 @@ async function getGoodWeColumnData(semsToken, invId, column, date) {
  */
 async function getMockStationData(plantId) {
     console.log(`[DIAGNÓSTICO] SIMULANDO dados da Estação (Plant ID): ${plantId}...`);
-    
-    // Simula um pequeno atraso, como se fosse uma chamada de API real
     await new Promise(resolve => setTimeout(resolve, 50)); 
 
-    // Estes são os dados do seu último print (image.png)
+    // Dados do seu último print (image.png)
     const mockData = {
         day_generation: 3.30,
         month_generation: 302.60,
         year_generation: 307.90,
-        total_generation: 307.90, // No seu print, "Lifetime" é igual a "This Year"
-        nominal_power: 6.00 // Do seu print ("Total Installed Capacity")
+        total_generation: 307.90,
+        nominal_power: 6.00
     };
 
     console.log("[DIAGNÓSTICO] Sucesso: Dados da Estação SIMULADOS.");
-    // Retorna no formato que a função real retornaria (com 'data' dentro)
     return { data: mockData }; 
 }
 
-
 /**
- * Função auxiliar para extrair o valor mais recente (ou o primeiro) de uma resposta de coluna (inversor).
+ * Função auxiliar para extrair o valor mais recente (ou o primeiro).
  */
 function extractLatestValue(apiData) {
     const dataArray = apiData?.data?.column1 || [];
@@ -95,51 +125,53 @@ function extractLatestValue(apiData) {
 
 console.log('--- 5. Definindo Rota /health ---');
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando (Modo Híbrido)' });
+    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando (Modo Híbrido + Login Robusto)' });
 });
 
 console.log('--- 6. Definindo Rota /api/dashboard ---');
 app.post('/api/dashboard', async (req, res) => {
-    // Note: 'plantId' ainda é necessário para manter a estrutura, mesmo sendo usado para mock
     const { account, pwd, invId, plantId } = req.body; 
     console.log(`[LOG] Recebida requisição para o dashboard: /api/dashboard (Modo Híbrido)`);
 
-    // Validação
     if (!account || !pwd || !invId || !plantId) {
         return res.status(400).json({ message: 'Credenciais, ID do Inversor (invId) e ID da Planta (plantId) são necessários.' });
     }
     
-    // --- 1. LÓGICA DE AUTENTICAÇÃO INTERNA (Login REAL) ---
-    const initialTokenPayload = { "client": "web", "version": "v1.0.0", "language": "en" };
-    const initialToken = Buffer.from(JSON.stringify(initialTokenPayload)).toString('base64');
-    const loginUrl = `${BASE_URL}/api/v2/common/crosslogin`;
-    const loginHeaders = { "Token": initialToken, "Content-Type": "application/json", "Accept": "application/json" };
-    const loginPayload = { "account": account, "pwd": pwd, "is_local": false };
+    // --- 1. LÓGICA DE AUTENTICAÇÃO ROBUSTA (Versão 13) ---
+    let loginResult = null;
+    let lastError = null;
 
-    try {
-        console.log('-> [DASHBOARD] Tentando login na API GoodWe...');
-        const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 15000 });
-        const semsData = loginResponse.data;
-
-        if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
-            console.error('-> Falha no Login GoodWe:', semsData);
-            return res.status(401).json({ message: 'Falha no login com a API GoodWe.', details: semsData });
+    for (const baseUrl of SEMS_SERVERS) {
+        try {
+            loginResult = await attemptLogin(baseUrl, account, pwd);
+            if (loginResult) {
+                break; // Se o login for bem-sucedido, sai do loop
+            }
+        } catch (error) {
+            console.warn(error.message);
+            lastError = error.message;
         }
+    }
 
-        const semsToken = Buffer.from(JSON.stringify(semsData.data)).toString('base64');
-        console.log('-> [DASHBOARD] semsToken obtido com sucesso.');
+    // Se, após todas as tentativas, o loginResult ainda for nulo
+    if (!loginResult) {
+        console.error('-> Falha no Login GoodWe em TODOS os servidores.');
+        return res.status(401).json({ 
+            message: 'Falha no login com a API GoodWe. Verifique as credenciais ou a API pode estar a bloquear o IP do servidor.', 
+            details: lastError 
+        });
+    }
+
+    const { workingBaseUrl, semsToken } = loginResult;
         
-        // --- 2. BUSCAR DADOS (ESTAÇÃO SIMULADA + INVERSOR REAL) ---
-        const todayString = new Date().toISOString().split('T[')[0] + " 00:00:00";
+    // --- 2. BUSCAR DADOS (ESTAÇÃO SIMULADA + INVERSOR REAL) ---
+    try {
+        const todayString = new Date().toISOString().split('T')[0] + " 00:00:00";
         
-        // Tarefa 1: Chamar a função SIMULADA (Mock)
         const stationDataPromise = getMockStationData(plantId);
+        const pacPromise = getGoodWeColumnData(workingBaseUrl, semsToken, invId, 'pac', todayString);
+        const batteryPromise = getGoodWeColumnData(workingBaseUrl, semsToken, invId, 'Cbattery1', todayString);
 
-        // Tarefa 2: Chamar as funções REAIS do Inversor
-        const pacPromise = getGoodWeColumnData(semsToken, invId, 'pac', todayString);
-        const batteryPromise = getGoodWeColumnData(semsToken, invId, 'Cbattery1', todayString);
-
-        // Usamos allSettled para garantir que, se a bateria falhar, o 'pac' ainda funcione
         const [
             stationResult, 
             pacResult, 
@@ -153,7 +185,6 @@ app.post('/api/dashboard', async (req, res) => {
         // --- 3. EXTRAIR E PROCESSAR OS VALORES ---
         let geracaoDiaria = 0, geracaoMensal = 0, geracaoAnual = 0, geracaoTotal = 0, capacidadeInstalada = 6.00;
 
-        // Processa dados da ESTAÇÃO (Simulados)
         if (stationResult.status === 'fulfilled' && stationResult.value.data) {
             const stationData = stationResult.value.data;
             console.log("[DIAGNÓSTICO] Sucesso: Dados da Estação SIMULADOS recebidos:", stationData);
@@ -163,34 +194,32 @@ app.post('/api/dashboard', async (req, res) => {
             geracaoTotal = parseFloat(stationData.total_generation);
             capacidadeInstalada = parseFloat(stationData.nominal_power);
         } else {
-             // Isto não deve acontecer, pois a função mock sempre funciona
              console.error('❌ Erro CRÍTICO: Falha ao buscar dados SIMULADOS da Estação.');
         }
 
-        // Processa dados REAIS do INVERSOR
         const potenciaAtual = (pacResult.status === 'fulfilled') ? extractLatestValue(pacResult.value) : 0;
         const nivelBateria = (batteryResult.status === 'fulfilled') ? extractLatestValue(batteryResult.value) : 0;
         
         if (pacResult.status === 'rejected') console.warn('Aviso: Falha ao buscar coluna REAL "pac".', pacResult.reason.message);
         if (batteryResult.status === 'rejected') console.warn('Aviso: Falha ao buscar coluna REAL "Cbattery1".', batteryResult.reason.message);
 
-
         // --- 4. MONTAR O JSON DE RESPOSTA (SEMPRE SUCESSO) ---
         const responsePayload = {
             ok: true,
-            data_status: "hybrid_mock_plant_real_inverter", // Status claro
+            data_status: "hybrid_mock_plant_real_inverter",
             realtime: { 
-                potencia_atual_w: potenciaAtual,     // DADO REAL
-                nivel_bateria_percent: nivelBateria // DADO REAL
+                potencia_atual_w: potenciaAtual,
+                nivel_bateria_percent: nivelBateria
             },
             summary: { 
-                geracao_diaria_kwh: geracaoDiaria,   // DADO SIMULADO
-                geracao_mensal_kwh: geracaoMensal, // DADO SIMULADO
-                geracao_anual_kwh: geracaoAnual,   // DADO SIMULADO
-                geracao_total_kwh: geracaoTotal,     // DADO SIMULADO
+                geracao_diaria_kwh: geracaoDiaria,
+                geracao_mensal_kwh: geracaoMensal,
+                geracao_anual_kwh: geracaoAnual,
+                geracao_total_kwh: geracaoTotal,
                 capacidade_instalada_kwp: capacidadeInstalada
             },
-            last_updated: new Date().toISOString()
+            last_updated: new Date().toISOString(),
+            server_used: workingBaseUrl // Informa qual servidor funcionou
         };
         
         // 5. Salvar no MongoDB
@@ -207,7 +236,6 @@ app.post('/api/dashboard', async (req, res) => {
             console.warn('⚠️  Aviso: Falha ao salvar (Híbrido) no MongoDB:', dbError.message);
         }
 
-        // 6. Enviar resposta para o App
         res.status(200).json(responsePayload);
 
     } catch (error) {
@@ -226,7 +254,7 @@ if (!DB_URI) {
 }
 
 console.log('--- 7. Conectando ao MongoDB... ---');
-mongoose.connect(DB_URI)
+mongoose.connect(DB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => {
         console.log('✅ Serviço de Integração conectado ao MongoDB');
         app.listen(port, () => {
