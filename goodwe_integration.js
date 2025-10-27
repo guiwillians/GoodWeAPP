@@ -1,4 +1,5 @@
-// goodwe_api.js - Versão Híbrida (Estação + Inversor)
+// goodwe_api.js - Versão 12 (Híbrida: Mock da Estação + Inversor Real)
+// Esta versão SIMULA os dados da Estação (plantId) e busca os dados REAIS do Inversor (invId).
 require('dotenv').config();
 console.log('--- 1. dotenv carregado ---');
 
@@ -11,8 +12,8 @@ console.log('--- 2. Módulos carregados ---');
 
 const app = express();
 const port = process.env.PORT || 3001;
-// Voltando para 'us.semsportal.com' que é o correto para o Brasil
-const SEMS_BASE_URL = process.env.SEMS_BASE_URL || 'https://us.semsportal.com'; 
+// Usando 'us' - Sabemos que Login e V1 (Inversor) funcionam aqui
+const BASE_URL = process.env.BASE_URL || 'https://us.semsportal.com'; 
 
 // --- MIDDLEWARES E CONFIGURAÇÃO ---
 console.log('--- 3. Configurando Middlewares ---');
@@ -27,51 +28,52 @@ const powerDataSchema = new mongoose.Schema({
     data: { type: Object, required: true },
     timestamp: { type: Date, default: Date.now }
 });
-// Evita erro de sobrescrita em HMR (Hot Module Replacement)
 const PowerData = mongoose.models.PowerData || mongoose.model('PowerData', powerDataSchema);
 console.log('--- 4. Schema MongoDB definido ---');
 
 
 /**
  * Função auxiliar para buscar dados do INVERSOR (coluna única).
- * Usada para dados em tempo real (Potência, Bateria).
+ * ESTA É UMA CHAMADA REAL.
  */
 async function getGoodWeColumnData(semsToken, invId, column, date) {
-    const dataUrl = `${SEMS_BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
+    const dataUrl = `${BASE_URL}/api/PowerStationMonitor/GetInverterDataByColumn`;
     const dataHeaders = { "Token": semsToken, "Content-Type": "application/json", "Accept": "*/*" };
     const dataPayload = { "date": date, "column": column, "id": invId };
 
-    console.log(`[DIAGNÓSTICO] Buscando coluna (Inversor): ${column}...`);
+    console.log(`[DIAGNÓSTICO] Buscando coluna REAL (Inversor): ${column}...`);
     const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
     
     if (response.data.code !== 0) {
         throw new Error(`Falha ao buscar dados da coluna '${column}'. Mensagem: ${response.data.msg}. Código: ${response.data.code}`);
     }
     
-    console.log(`[DIAGNÓSTICO] Sucesso ao buscar coluna: ${column}.`);
+    console.log(`[DIAGNÓSTICO] Sucesso ao buscar coluna REAL: ${column}.`);
     return response.data;
 }
 
 /**
- * Função auxiliar para buscar dados da ESTAÇÃO (Planta).
- * Usada para dados de sumário (Diário, Mensal, Anual, Total).
+ * Função auxiliar SIMULADA (Mock) para dados da ESTAÇÃO (Planta).
+ * ESTA FUNÇÃO NÃO FAZ CHAMADA DE API. Ela retorna os dados do seu print.
  */
-async function getGoodWeStationData(semsToken, plantId) {
-    const dataUrl = `${SEMS_BASE_URL}/api/v2/PowerStation/GetStatisticsByPowerStationId`;
-    const dataHeaders = { "Token": semsToken, "Content-Type": "application/json", "Accept": "*/*" };
-    const dataPayload = { "powerStationId": plantId };
-
-    console.log(`[DIAGNÓSTICO] Buscando dados da Estação (Plant ID): ${plantId}...`);
-    const response = await axios.post(dataUrl, dataPayload, { headers: dataHeaders, timeout: 20000 });
-
-    // GoodWe usa 0 ou 200 para sucesso em diferentes endpoints
-    if (response.data.code !== 0 && response.data.code !== 200) {
-        // O erro "ver is not fund" (Código 100000) acontece aqui se o ID for inválido
-        throw new Error(`Falha ao buscar dados da Estação. Mensagem: ${response.data.msg}. Código: ${response.data.code}`);
-    }
+async function getMockStationData(plantId) {
+    console.log(`[DIAGNÓSTICO] SIMULANDO dados da Estação (Plant ID): ${plantId}...`);
     
-    console.log(`[DIAGNÓSTICO] Sucesso ao buscar dados da Estação.`);
-    return response.data;
+    // Simula um pequeno atraso, como se fosse uma chamada de API real
+    await new Promise(resolve => setTimeout(resolve, 50)); 
+
+    // Estes são os dados do seu último print (image.png)
+    const mockData = {
+        day_generation: 3.30,
+        month_generation: 302.60,
+        year_generation: 307.90,
+        total_generation: 307.90, // No seu print, "Lifetime" é igual a "This Year"
+        nominal_power: 6.00 // Do seu print ("Total Installed Capacity")
+    };
+
+    console.log("[DIAGNÓSTICO] Sucesso: Dados da Estação SIMULADOS.");
+    // Retorna no formato que a função real retornaria (com 'data' dentro)
+    return { data: mockData }; 
 }
 
 
@@ -81,9 +83,7 @@ async function getGoodWeStationData(semsToken, plantId) {
 function extractLatestValue(apiData) {
     const dataArray = apiData?.data?.column1 || [];
     if (dataArray.length > 0) {
-        if (dataArray.length === 1) {
-            return parseFloat(dataArray[0].column) || 0;
-        }
+        if (dataArray.length === 1) { return parseFloat(dataArray[0].column) || 0; }
         const lastPoint = dataArray[dataArray.length - 1];
         return parseFloat(lastPoint.column) || 0;
     }
@@ -93,114 +93,101 @@ function extractLatestValue(apiData) {
 
 // --- ROTAS DA API ---
 
-// Rota de health check (GET /health)
 console.log('--- 5. Definindo Rota /health ---');
 app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando' });
+    res.status(200).json({ status: 'OK', message: 'API GoodWe está funcionando (Modo Híbrido)' });
 });
 
-// Rota de Dashboard Unificada: Pega todos os dados necessários
 console.log('--- 6. Definindo Rota /api/dashboard ---');
 app.post('/api/dashboard', async (req, res) => {
-    // *** MUDANÇA: 'plantId' agora é OBRIGATÓRIO. Removemos a busca por nome e auto-detecção. ***
+    // Note: 'plantId' ainda é necessário para manter a estrutura, mesmo sendo usado para mock
     const { account, pwd, invId, plantId } = req.body; 
-    console.log(`[LOG] Recebida requisição para o dashboard: /api/dashboard`);
+    console.log(`[LOG] Recebida requisição para o dashboard: /api/dashboard (Modo Híbrido)`);
 
     // Validação
     if (!account || !pwd || !invId || !plantId) {
-        return res.status(400).json({ message: 'Credenciais, ID do Inversor e ID da Planta (plantId) são necessários.' });
+        return res.status(400).json({ message: 'Credenciais, ID do Inversor (invId) e ID da Planta (plantId) são necessários.' });
     }
     
-    // Evita o envio de "teste" ou nomes
-    if (plantId.length < 30) { // IDs reais são longos (formato UUID)
-         console.warn(`[AVISO] 'plantId' recebido parece curto demais: "${plantId}". Pode não ser um ID válido.`);
-    }
-
-    // --- 1. LÓGICA DE AUTENTICAÇÃO INTERNA (GoodWe Login) ---
+    // --- 1. LÓGICA DE AUTENTICAÇÃO INTERNA (Login REAL) ---
     const initialTokenPayload = { "client": "web", "version": "v1.0.0", "language": "en" };
     const initialToken = Buffer.from(JSON.stringify(initialTokenPayload)).toString('base64');
-    const loginUrl = `${SEMS_BASE_URL}/api/v2/common/crosslogin`;
+    const loginUrl = `${BASE_URL}/api/v2/common/crosslogin`;
     const loginHeaders = { "Token": initialToken, "Content-Type": "application/json", "Accept": "application/json" };
     const loginPayload = { "account": account, "pwd": pwd, "is_local": false };
 
     try {
-        console.log('-> Tentando login na API GoodWe...');
+        console.log('-> [DASHBOARD] Tentando login na API GoodWe...');
         const loginResponse = await axios.post(loginUrl, loginPayload, { headers: loginHeaders, timeout: 15000 });
         const semsData = loginResponse.data;
 
         if (semsData.code !== 0 && semsData.code !== 1 && semsData.code !== 200) {
-            console.error('-> Falha no Login GoodWe (Credenciais Inválidas):', semsData);
-            return res.status(401).json({ message: 'Falha no login com a API GoodWe. Verifique as credenciais.', details: semsData });
+            console.error('-> Falha no Login GoodWe:', semsData);
+            return res.status(401).json({ message: 'Falha no login com a API GoodWe.', details: semsData });
         }
 
         const semsToken = Buffer.from(JSON.stringify(semsData.data)).toString('base64');
-        console.log('-> semsToken obtido com sucesso.');
-        console.log(`[DIAGNÓSTICO] Usando plantId fornecido manualmente: ${plantId}`);
+        console.log('-> [DASHBOARD] semsToken obtido com sucesso.');
         
-        // --- 2. BUSCAR DADOS (ESTAÇÃO E INVERSOR) EM PARALELO ---
-        const todayString = new Date().toISOString().split('T')[0] + " 00:00:00";
+        // --- 2. BUSCAR DADOS (ESTAÇÃO SIMULADA + INVERSOR REAL) ---
+        const todayString = new Date().toISOString().split('T[')[0] + " 00:00:00";
         
-        // Tarefa 1: Buscar dados da Estação (Sumário Confiável)
-        const stationDataPromise = getGoodWeStationData(semsToken, plantId);
+        // Tarefa 1: Chamar a função SIMULADA (Mock)
+        const stationDataPromise = getMockStationData(plantId);
 
-        // Tarefa 2: Buscar dados do Inversor (Tempo Real)
-        const inverterColumns = ['pac', 'Cbattery1']; 
-        const inverterDataPromises = inverterColumns.map(column => 
-            getGoodWeColumnData(semsToken, invId, column, todayString)
-        );
+        // Tarefa 2: Chamar as funções REAIS do Inversor
+        const pacPromise = getGoodWeColumnData(semsToken, invId, 'pac', todayString);
+        const batteryPromise = getGoodWeColumnData(semsToken, invId, 'Cbattery1', todayString);
 
-        const [stationResult, pacResult, cbattery1Result] = await Promise.allSettled([
+        // Usamos allSettled para garantir que, se a bateria falhar, o 'pac' ainda funcione
+        const [
+            stationResult, 
+            pacResult, 
+            batteryResult
+        ] = await Promise.allSettled([
             stationDataPromise,
-            ...inverterDataPromises
+            pacPromise,
+            batteryPromise
         ]);
 
         // --- 3. EXTRAIR E PROCESSAR OS VALORES ---
-        let geracaoDiaria = 0;
-        let geracaoMensal = 0;
-        let geracaoAnual = 0;
-        let geracaoTotal = 0;
-        let capacidadeInstalada = 6.00; // Valor padrão
+        let geracaoDiaria = 0, geracaoMensal = 0, geracaoAnual = 0, geracaoTotal = 0, capacidadeInstalada = 6.00;
 
+        // Processa dados da ESTAÇÃO (Simulados)
         if (stationResult.status === 'fulfilled' && stationResult.value.data) {
             const stationData = stationResult.value.data;
-            console.log("[DIAGNÓSTICO] Dados da Estação recebidos:", stationData);
-            geracaoDiaria = parseFloat(stationData.day_generation) || 0;
-            geracaoMensal = parseFloat(stationData.month_generation) || 0;
-            geracaoAnual = parseFloat(stationData.year_generation) || 0;
-            geracaoTotal = parseFloat(stationData.total_generation) || 0;
-            capacidadeInstalada = parseFloat(stationData.nominal_power) || 6.00;
+            console.log("[DIAGNÓSTICO] Sucesso: Dados da Estação SIMULADOS recebidos:", stationData);
+            geracaoDiaria = parseFloat(stationData.day_generation);
+            geracaoMensal = parseFloat(stationData.month_generation);
+            geracaoAnual = parseFloat(stationData.year_generation);
+            geracaoTotal = parseFloat(stationData.total_generation);
+            capacidadeInstalada = parseFloat(stationData.nominal_power);
         } else {
-             // Se esta chamada falhar, é 99% de certeza que o plantId está errado.
-             console.error('❌ Erro CRÍTICO: Falha ao buscar dados da Estação.');
-             if (stationResult.status === 'rejected') {
-                console.error('Erro Estação:', stationResult.reason.message);
-                // Retorna um erro claro para o usuário
-                return res.status(404).json({ message: `Falha ao buscar dados da estação. Verifique se o seu 'plantId' está correto. (Erro: ${stationResult.reason.message})` });
-             }
-             // Fallback para o total (último caso)
-             const etotalFallback = await getGoodWeColumnData(semsToken, invId, 'etotal', todayString).catch(() => null);
-             if (etotalFallback) geracaoTotal = extractLatestValue(etotalFallback);
+             // Isto não deve acontecer, pois a função mock sempre funciona
+             console.error('❌ Erro CRÍTICO: Falha ao buscar dados SIMULADOS da Estação.');
         }
 
+        // Processa dados REAIS do INVERSOR
         const potenciaAtual = (pacResult.status === 'fulfilled') ? extractLatestValue(pacResult.value) : 0;
-        const nivelBateria = (cbattery1Result.status === 'fulfilled') ? extractLatestValue(cbattery1Result.value) : 0;
-        if (pacResult.status === 'rejected') console.error('Erro Inversor (pac):', pacResult.reason.message);
-        if (cbattery1Result.status === 'rejected') console.warn('Aviso Inversor (Cbattery1):', cbattery1Result.reason.message);
+        const nivelBateria = (batteryResult.status === 'fulfilled') ? extractLatestValue(batteryResult.value) : 0;
+        
+        if (pacResult.status === 'rejected') console.warn('Aviso: Falha ao buscar coluna REAL "pac".', pacResult.reason.message);
+        if (batteryResult.status === 'rejected') console.warn('Aviso: Falha ao buscar coluna REAL "Cbattery1".', batteryResult.reason.message);
 
 
-        // --- 4. MONTAR O JSON DE RESPOSTA PARA O FLUTTERFLOW ---
+        // --- 4. MONTAR O JSON DE RESPOSTA (SEMPRE SUCESSO) ---
         const responsePayload = {
             ok: true,
-            data_status: (stationResult.status === 'fulfilled' || pacResult.status === 'fulfilled') ? "real" : "offline_or_error",
-            realtime: {
-                potencia_atual_w: potenciaAtual, 
-                nivel_bateria_percent: nivelBateria 
+            data_status: "hybrid_mock_plant_real_inverter", // Status claro
+            realtime: { 
+                potencia_atual_w: potenciaAtual,     // DADO REAL
+                nivel_bateria_percent: nivelBateria // DADO REAL
             },
-            summary: {
-                geracao_diaria_kwh: geracaoDiaria,
-                geracao_mensal_kwh: geracaoMensal, 
-                geracao_anual_kwh: geracaoAnual, 
-                geracao_total_kwh: geracaoTotal,
+            summary: { 
+                geracao_diaria_kwh: geracaoDiaria,   // DADO SIMULADO
+                geracao_mensal_kwh: geracaoMensal, // DADO SIMULADO
+                geracao_anual_kwh: geracaoAnual,   // DADO SIMULADO
+                geracao_total_kwh: geracaoTotal,     // DADO SIMULADO
                 capacidade_instalada_kwp: capacidadeInstalada
             },
             last_updated: new Date().toISOString()
@@ -209,15 +196,15 @@ app.post('/api/dashboard', async (req, res) => {
         // 5. Salvar no MongoDB
         try {
             const newPowerData = new PowerData({
-                userId: 'flutterflow_user_fixed_id',
+                userId: 'flutterflow_user_hybrid',
                 invId: invId,
                 plantId: plantId, 
                 data: responsePayload 
             });
             await newPowerData.save();
-            console.log('✅ Dados salvos no MongoDB com sucesso.');
+            console.log('✅ Dados (Híbridos) salvos no MongoDB.');
         } catch (dbError) {
-            console.warn('⚠️  Aviso: Falha ao salvar no MongoDB:', dbError.message);
+            console.warn('⚠️  Aviso: Falha ao salvar (Híbrido) no MongoDB:', dbError.message);
         }
 
         // 6. Enviar resposta para o App
@@ -225,9 +212,7 @@ app.post('/api/dashboard', async (req, res) => {
 
     } catch (error) {
         console.error('❌ Erro CRÍTICO ao processar a requisição do dashboard:', error.message);
-        if (error.response) {
-            console.error('Detalhes do erro (Axios):', error.response.data);
-        }
+        if (error.response) { console.error('Detalhes do erro (Axios):', error.response.data); }
         res.status(500).json({ ok: false, message: 'Erro interno ao processar a requisição do dashboard.' });
     }
 });
